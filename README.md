@@ -79,4 +79,6 @@
 
 ## Запуск
 
-Открыть `index.html` в браузере или выложить на любой статический хостинг (GitHub Pages, Netlify, Vercel). Ключи API не нужны.
+- Онлайн: https://itlyashev-boris.github.io/skycoach-character-scan/
+- Сразу с персонажем: https://itlyashev-boris.github.io/skycoach-character-scan/?region=eu&realm=ревущий-фьорд&name=Киттнесс
+- Локально: открыть `index.html` в браузере. Ключи API не нужны.
