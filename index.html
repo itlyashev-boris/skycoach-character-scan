@@ -125,6 +125,9 @@ h2 { font-family: var(--font-display); font-weight: 500; font-size: 17px; letter
 .stat { background: var(--panel-2); border-radius: 8px; padding: 12px; display: grid; gap: 4px; min-width: 0; }
 .stat .v { font-family: var(--font-mono); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .stat .s { font-size: 12px; color: var(--muted); }
+.stats.s3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.coll-form { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; }
+.coll-form .btn { margin-top: 21px; padding: 9px 16px; }
 .bars { display: grid; gap: 8px; }
 .bar-row { display: grid; grid-template-columns: 130px 1fr 40px; gap: 10px; align-items: center; font-size: 13px; }
 .bar { height: 8px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
@@ -200,7 +203,10 @@ footer { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
   .form-row { grid-template-columns: 1fr 1fr; }
   .form-row .field.name, .form-row .btn { grid-column: span 2; }
   .manual-grid { grid-template-columns: 1fr 1fr; }
-  .stats { grid-template-columns: 1fr 1fr; }
+  .stats, .stats.s3 { grid-template-columns: 1fr 1fr; }
+  .stats.s3 .stat:last-child { grid-column: span 2; }
+  .coll-form { grid-template-columns: 1fr; }
+  .coll-form .btn { margin-top: 0; }
   .hero { grid-template-columns: auto 1fr; }
   .hero .ring { grid-column: span 2; justify-self: start; }
   .bar-row { grid-template-columns: 100px 1fr 36px; }
@@ -277,6 +283,8 @@ footer { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
           </select></div>
         <div class="field"><label for="m-tier">Частей тир-сета</label>
           <select id="m-tier"><option value="">Не знаю</option><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
+        <div class="field" id="mf-ach"><label for="m-ach">Очки достижений (необязательно)</label><input id="m-ach" type="number" inputmode="numeric" min="0" max="60000" placeholder="в игре: окно «Достижения»"><div class="err" hidden></div></div>
+        <div class="field" id="mf-mounts"><label for="m-mounts">Маунтов собрано (необязательно)</label><input id="m-mounts" type="number" inputmode="numeric" min="0" max="1500" placeholder="Коллекции → Транспорт"><div class="err" hidden></div></div>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center">
         <button class="btn" type="submit">Проанализировать</button>
@@ -344,6 +352,17 @@ const CONFIG = {
   staleDays: 14,
   bundleDiscount: 10,       // % скидки на пакет (пример механики)
   memberDiscount: 7,        // % скидки подписчика (концепт Skycoach Membership)
+  // Коллекции: Raider.IO отдаёт только очки достижений, число маунтов игрок вводит сам
+  achTiers: [
+    { min: 0,     name: "Начинающий коллекционер" },
+    { min: 10000, name: "Опытный игрок" },
+    { min: 20000, name: "Коллекционер" },
+    { min: 30000, name: "Ветеран коллекций" },
+  ],
+  mountMilestones: [50, 100, 150, 200, 250, 300, 400, 500],
+  mountGapHot: 15,          // до отметки осталось столько маунтов или меньше → правило важнее
+  maxMounts: 1500,
+  maxAchPts: 60000,
   fetchTimeoutMs: 12000,
   cacheTtlMs: 10 * 60 * 1000,
 };
@@ -371,6 +390,10 @@ const SERVICES = {
   kithix:       { title: "The Unbinding of Kith'ix",        path: "/wow-boost/raids/the-unbinding-of-kithix",                  cat: "Рейды" },
   raid_key:     { title: "Рейд + ключ M+10",                path: "/wow-boost/products/raid-plus-mythic-key-bundle-3596",      cat: "Пакеты" },
   mounts:       { title: "Маунты и коллекции",              path: "/wow-boost/mounts",                                          cat: "Коллекции" },
+  mounts_regular: { title: "Маунты: разовые заказы",        path: "/wow-boost/mounts/regular-mounts",                           cat: "Коллекции" },
+  transmog:     { title: "Трансмогрификация",               path: "/wow-boost/mounts/transmog",                                 cat: "Коллекции" },
+  hunter_pets:  { title: "Редкие питомцы охотника",         path: "/wow-boost/mounts/hunter-pets",                              cat: "Коллекции" },
+  achievements: { title: "Достижения",                      path: "/wow-boost/powerleveling/achievements",                      cat: "Достижения" },
   glory:        { title: "Glory of the Venomous Abyss Raider", path: "/wow-boost/products/glory-of-the-venomous-abyss-raider-10793", cat: "Достижения" },
   coaching:     { title: "Коучинг с про-игроком",           path: "/wow-boost/powerleveling",                                   cat: "Коучинг" },
   pvp:          { title: "PvP: Solo Shuffle",               path: "/wow-boost/products/solo-shuffle-2085",                     cat: "PvP" },
@@ -576,7 +599,16 @@ function normalizeRio(raw) {
     raids,
     aotc: curve ? Boolean(curve.aotc) : null,
     ce: curve ? Boolean(curve.cutting_edge) : null,
+    collection: { achPts: num(raw.achievement_points) || null, mounts: null },
+    armoryUrl: armoryUrl(raw.profile_url),
   };
+}
+
+/* Ссылка на коллекцию в Оружейной Blizzard: регион и slug сервера берём из ссылки Raider.IO */
+function armoryUrl(rioUrl) {
+  const m = /raider\.io\/characters\/([a-z]{2})\/([^/]+)\/([^/?#]+)/i.exec(rioUrl || "");
+  if (!m) return null;
+  return `https://worldofwarcraft.blizzard.com/ru-ru/character/${m[1].toLowerCase()}/${m[2]}/${encodeURIComponent(decodeURIComponent(m[3]).toLowerCase())}/collections/mounts`;
 }
 
 function normalizeManual(f) {
@@ -592,6 +624,7 @@ function normalizeManual(f) {
     ilvl: f.ilvl, gear: f.gear || null, tierManual: f.tier,
     mplus: { score: f.score, color: null, best: f.best || [], recentCount: null },
     raids, aotc: h >= 8 ? true : (f.raid === "0" ? false : null), ce: m >= 8 ? true : null,
+    collection: { achPts: f.achPts ?? null, mounts: f.mounts ?? null }, armoryUrl: null,
   };
 }
 
@@ -788,6 +821,70 @@ function rank(list) {
     .map((r, i) => ({ ...r, tier: i === 0 ? 1 : r.prio >= 60 ? 2 : 3 }));
 }
 
+/* Коллекция: маунты, облики, питомцы, достижения. Аккаунтные данные, поэтому считаются на любом уровне.
+   Отдельный блок, чтобы прогрессия сезона не вытесняла коллекционные предложения из топ-5. */
+function mountsError(v) {
+  return v !== null && (v < 0 || v > CONFIG.maxMounts || !Number.isInteger(v)) ? `Число маунтов: целое от 0 до ${fmt(CONFIG.maxMounts)}.` : null;
+}
+function analyzeCollection(ch, takenSvcs) {
+  const col = ch.collection || { achPts: null, mounts: null };
+  const ach = col.achPts, mounts = col.mounts;
+  const lvl = ch.level ?? CONFIG.maxLevel;
+  const va = ch.raids["the-venomous-abyss"] || { h: 0 };
+  const tier = ach === null ? null : [...CONFIG.achTiers].reverse().find((t) => ach >= t.min);
+  const nextMile = mounts === null ? null : CONFIG.mountMilestones.find((m) => m > mounts) || null;
+  const prevMile = mounts === null ? null : [0, ...CONFIG.mountMilestones].filter((m) => m <= mounts).pop();
+  const list = [];
+  const add = (r) => list.push(r);
+
+  if (nextMile !== null) {
+    const gap = nextMile - mounts;
+    const hot = gap <= CONFIG.mountGapHot;
+    add({ id: "coll_mount_milestone", svc: "mounts_regular", prio: hot ? 70 : 45,
+      title: `${fmt(nextMile)} маунтов в коллекции`,
+      why: `Собрано ${fmt(mounts)}. До отметки ${fmt(nextMile)} не хватает ${gap} ${plural(gap, "маунта", "маунтов", "маунтов")}${hot ? ": это несколько разовых заказов" : ""}. За число маунтов в игре дают достижения.`,
+      gain: `Достижение за ${fmt(nextMile)} маунтов` });
+  } else if (mounts !== null) {
+    add({ id: "coll_mount_rare", svc: "mounts", prio: 50,
+      title: "Редкие маунты",
+      why: `В коллекции ${fmt(mounts)} маунтов: простые уже собраны. Остались редкие, с низким шансом выпадения и из старых рейдов.`,
+      gain: "Маунты, которых нет у большинства игроков" });
+  }
+  if (lvl >= CONFIG.maxLevel && va.h >= 8) {
+    add({ id: "coll_glory", svc: "glory", prio: 55,
+      title: "Маунт за «Славу рейдера»",
+      why: "Героик The Venomous Abyss закрыт. Следующая награда рейда — маунт за мета-достижение Glory of the Venomous Abyss Raider.",
+      gain: "Маунт сезона за мета-достижение" });
+  }
+  if (ch.className === "Hunter") {
+    add({ id: "coll_hunter_pets", svc: "hunter_pets", prio: 52,
+      title: "Редкие питомцы охотника",
+      why: "Охотник приручает зверей с уникальной внешностью. Многие из них появляются редко или живут в старых рейдах.",
+      gain: "Питомец с редкой моделью" });
+  }
+  if (ach !== null && ach >= 20000) {
+    add({ id: "coll_transmog", svc: "transmog", prio: 48,
+      title: "Комплекты трансмогрификации",
+      why: `${fmt(ach)} очков достижений: это профиль коллекционера. Таким игрокам важен внешний вид, а не только уровень предметов.`,
+      gain: "Редкие облики из старых рейдов и PvP" });
+  }
+  if (ach !== null && ach < 10000 && lvl >= CONFIG.maxLevel) {
+    add({ id: "coll_achievements", svc: "achievements", prio: 40,
+      title: "Первые крупные достижения",
+      why: `${fmt(ach)} очков достижений: коллекция только начинается. За достижения дают маунтов, титулы и облики.`,
+      gain: "Маунты, титулы и облики за достижения" });
+  }
+  if (!list.length) {
+    add({ id: "coll_mounts", svc: "mounts", prio: 30,
+      title: "Маунты и облики",
+      why: "Укажите число маунтов ниже, и мы подберём ближайшую цель коллекции.",
+      gain: "Пополнение коллекции" });
+  }
+  const recos = list.sort((a, b) => b.prio - a.prio).filter((r) => !takenSvcs.has(r.svc)).slice(0, 2);
+  const ksmMount = lvl >= CONFIG.maxLevel ? (ch.mplus.score || 0) >= 2000 : null;
+  return { ach, mounts, tier, nextMile, prevMile, recos, ksmMount };
+}
+
 /* ============================================================
    7. Рендер
    ============================================================ */
@@ -892,6 +989,38 @@ function renderResult(ch, a) {
       <div><a class="cta-link ghost" href="${SKY}/cashback?utm_source=character_scan&utm_medium=crosssell&utm_campaign=membership_teaser" target="_blank" rel="noopener" data-svc="membership" data-rule="membership_teaser">Узнать о подписке →</a></div>
     </div>`;
 
+  // Коллекция и достижения
+  const c = analyzeCollection(ch, new Set(paid.map((r) => r.svc)));
+  const mileBar = c.nextMile !== null ? `
+    <div class="bar-row"><span>До ${fmt(c.nextMile)} маунтов</span><div class="bar"><i style="width:${Math.round(clamp((c.mounts - c.prevMile) / (c.nextMile - c.prevMile)) * 100)}%"></i></div><span class="mono small">${fmt(c.mounts)}</span></div>` : "";
+  const collRecos = c.recos.map((r) => {
+    const s = SERVICES[r.svc];
+    return `<article class="reco" data-rule="${r.id}">
+      <div class="reco-head"><h3>${esc(r.title)}</h3><span class="prio p3">Коллекция</span></div>
+      <p class="why">${esc(r.why)}</p>
+      <p class="gain">Результат: <b>${esc(r.gain)}</b></p>
+      <div class="cta"><a class="cta-link ghost" href="${serviceUrl(r.svc, r.id)}" target="_blank" rel="noopener" data-svc="${r.svc}" data-rule="${r.id}">${esc(s.title)} →</a><span class="small muted">${s.cat}</span></div>
+    </article>`;
+  }).join("");
+  const collection = `
+    <section class="panel" id="collection">
+      <div class="panel-head"><h2>Коллекция и достижения</h2>${c.tier ? `<span class="small" style="color:var(--accent);font-weight:700">${c.tier.name}</span>` : ""}</div>
+      <div class="stats s3">
+        <div class="stat"><span class="label">Очки достижений</span><span class="v">${c.ach === null ? "—" : fmt(c.ach)}</span><span class="s">${c.ach === null ? (ch.source === "raiderio" ? "Raider.IO не передал" : "не указано") : "на аккаунте"}</span></div>
+        <div class="stat"><span class="label">Маунты</span><span class="v">${c.mounts === null ? "—" : fmt(c.mounts)}</span><span class="s">${c.mounts === null ? "укажите ниже" : c.nextMile !== null ? `до ${fmt(c.nextMile)}: ${c.nextMile - c.mounts}` : "все отметки пройдены"}</span></div>
+        <div class="stat"><span class="label">Маунт за 2 000 M+</span><span class="v">${c.ksmMount === null ? "—" : c.ksmMount ? "есть" : "нет"}</span><span class="s">${c.ksmMount === null ? "после 90 уровня" : c.ksmMount ? "Keystone Master" : `рейтинг ${fmt(ch.mplus.score || 0)} из 2 000`}</span></div>
+      </div>
+      ${mileBar}
+      <form class="coll-form" id="coll-form" novalidate>
+        <div class="field" id="fld-mounts"><label for="c-mounts">Сколько у вас маунтов?</label>
+          <input id="c-mounts" type="number" inputmode="numeric" min="0" max="${CONFIG.maxMounts}" value="${c.mounts ?? ""}" placeholder="например, 180">
+          <div class="err" id="err-mounts" hidden></div><div class="hint">В игре: Коллекции → Транспорт</div></div>
+        <button class="btn ghost" type="submit">${c.mounts === null ? "Учесть" : "Обновить"}</button>
+      </form>
+      ${c.recos.length ? `<div class="reco-list">${collRecos}</div>` : `<p class="muted small" style="margin:0">Предложения по коллекции уже есть в плане «Что прокачать дальше».</p>`}
+      <p class="small muted" style="margin:0">Raider.IO не отдаёт список маунтов, питомцев и обликов: его открывает только Blizzard API с ключом разработчика. Поэтому считаем по очкам достижений и числу маунтов, которое вы укажете.${ch.armoryUrl ? ` <a href="${esc(ch.armoryUrl)}" target="_blank" rel="noopener">Посмотреть коллекцию в Оружейной ↗</a>` : ""}</p>
+    </section>`;
+
   const tips = a.tips.length ? `
     <section class="panel"><h2>Бесплатные советы</h2><ul class="tips">${a.tips.map((t) => `<li><span>${esc(t)}</span></li>`).join("")}</ul></section>` : "";
 
@@ -919,6 +1048,7 @@ function renderResult(ch, a) {
           <div class="bars">${bars}</div>
         </section>
         ${staleNote}${manualNote}
+        ${collection}
         ${gearTable}
         <section class="panel">
           <div class="panel-head"><h2>Рейды сезона</h2><div>${achievements}</div></div>
@@ -940,7 +1070,21 @@ function renderResult(ch, a) {
       </div>
     </div>`;
 
-  track("recommendations_shown", { source: ch.source, readiness: a.readiness, rules: paid.map((r) => r.id) });
+  current = ch;
+  track("recommendations_shown", { source: ch.source, readiness: a.readiness, rules: paid.map((r) => r.id), collection_rules: c.recos.map((r) => r.id) });
+}
+let current = null;   // персонаж на экране: нужен, чтобы пересчитать анализ после ввода числа маунтов
+
+function refineMounts() {
+  const v = num($("#c-mounts").value);
+  const msg = v === null ? "Введите число маунтов." : mountsError(v);
+  $("#fld-mounts").classList.toggle("invalid", Boolean(msg));
+  $("#err-mounts").hidden = !msg; $("#err-mounts").textContent = msg || "";
+  if (msg || !current) return;
+  current.collection = { ...(current.collection || {}), mounts: v };
+  track("collection_refined", { mounts: v, source: current.source });
+  renderResult(current, analyze(current));
+  $("#collection").scrollIntoView({ block: "nearest" });
 }
 
 /* ============================================================
@@ -1050,7 +1194,10 @@ function setFieldError(field, msg) {
 function runManual() {
   clearNotices();
   const level = num($("#m-level").value), ilvl = num($("#m-ilvl").value), score = num($("#m-score").value);
+  const achPts = num($("#m-ach").value), mounts = num($("#m-mounts").value);
   const errs = {
+    ach: achPts !== null && (achPts < 0 || achPts > CONFIG.maxAchPts || !Number.isInteger(achPts)) ? `Очки достижений: целое число от 0 до ${fmt(CONFIG.maxAchPts)}.` : null,
+    mounts: mountsError(mounts),
     level: level === null || level < 1 || level > CONFIG.maxLevel || !Number.isInteger(level) ? `Уровень от 1 до ${CONFIG.maxLevel}.` : null,
     ilvl: ilvl !== null && (ilvl < 1 || ilvl > CONFIG.ilvlCap + 10) ? `Уровень предметов в этом сезоне от 1 до ${CONFIG.ilvlCap}.` : (ilvl === null && level === CONFIG.maxLevel ? "Укажите уровень предметов (в игре: окно персонажа)." : null),
     score: score !== null && (score < 0 || score > 5000) ? "Рейтинг от 0 до 5000." : null,
@@ -1065,8 +1212,9 @@ function runManual() {
     name: $("#m-name").value.trim() || "Мой персонаж", className: $("#m-class").value, role: $("#m-role").value,
     level, ilvl: level < CONFIG.maxLevel ? (ilvl ?? null) : ilvl, score: level < CONFIG.maxLevel ? null : (score ?? 0),
     raid: level < CONFIG.maxLevel ? "0" : $("#m-raid").value, tier: $("#m-tier").value,
+    achPts, mounts,
   });
-  track("manual_submitted", { level, ilvl, score });
+  track("manual_submitted", { level, ilvl, score, achPts, mounts });
   renderResult(ch, analyze(ch));
 }
 
@@ -1086,21 +1234,21 @@ function demoGear(avg, opts = {}) {
 }
 const DEMOS = [
   { key: "alt", label: "Твинк в прокачке", sub: "Монах, 78 уровень",
-    make: () => normalizeManual({ source: "demo", name: "Ветерок", className: "Monk", spec: "Windwalker", role: "DPS", race: "Pandaren", realm: "Gordunni", region: "EU", level: 78, ilvl: 241, score: null, raid: "0", tier: "0" }) },
+    make: () => normalizeManual({ source: "demo", name: "Ветерок", className: "Monk", spec: "Windwalker", role: "DPS", race: "Pandaren", realm: "Gordunni", region: "EU", level: 78, ilvl: 241, score: null, raid: "0", tier: "0", achPts: 4210, mounts: 38 }) },
   { key: "fresh", label: "Свежий 90 уровень", sub: "Охотник, 287 ур. предметов",
-    make: () => { const c = normalizeManual({ source: "demo", name: "Стрелолист", className: "Hunter", spec: "Beast Mastery", role: "DPS", race: "Night Elf", realm: "Howling Fjord", region: "EU", level: 90, ilvl: 287, score: 0, raid: "0" }); c.gear = demoGear(287, { noEnchant: ["head", "legs", "feet", "finger1", "finger2"] }); c.raids["the-tidebound-grotto"] = { n: 0, h: 0, m: 0, total: 1 }; c.raids["the-unbinding-of-kithix"] = { n: 0, h: 0, m: 0, total: 1 }; return c; } },
+    make: () => { const c = normalizeManual({ source: "demo", name: "Стрелолист", className: "Hunter", spec: "Beast Mastery", role: "DPS", race: "Night Elf", realm: "Howling Fjord", region: "EU", level: 90, ilvl: 287, score: 0, raid: "0", achPts: 9830, mounts: 94 }); c.gear = demoGear(287, { noEnchant: ["head", "legs", "feet", "finger1", "finger2"] }); c.raids["the-tidebound-grotto"] = { n: 0, h: 0, m: 0, total: 1 }; c.raids["the-unbinding-of-kithix"] = { n: 0, h: 0, m: 0, total: 1 }; return c; } },
   { key: "mid", label: "Середина сезона", sub: "Паладин, 1 740 M+, 3/8 героик",
-    make: () => { const c = normalizeManual({ source: "demo", name: "Светоклин", className: "Paladin", spec: "Retribution", role: "DPS", race: "Blood Elf", realm: "Ravencrest", region: "EU", level: 90, ilvl: 314, score: 1740, raid: "h4" });
+    make: () => { const c = normalizeManual({ source: "demo", name: "Светоклин", className: "Paladin", spec: "Retribution", role: "DPS", race: "Blood Elf", realm: "Ravencrest", region: "EU", level: 90, ilvl: 314, score: 1740, raid: "h4", achPts: 17450 });
       c.raids["the-venomous-abyss"] = { n: 8, h: 3, m: 0, total: 8 }; c.raids["the-tidebound-grotto"] = { n: 1, h: 0, m: 0, total: 1 }; c.raids["the-unbinding-of-kithix"] = { n: 0, h: 0, m: 0, total: 1 };
       c.aotc = false; c.gear = demoGear(314, { tier: 2, weak: ["wrist", "trinket2"], noEnchant: ["feet"] });
       c.mplus.best = [["DON", 9, 1], ["KR", 8, 1], ["MR", 8, 0], ["AOF", 7, 1], ["TOS", 9, 0], ["BV", 7, 1], ["RLP", 6, 1], ["VSA", 8, 0]].map(([s, l, t]) => ({ dungeon: s, short: s, level: l, timed: Boolean(t) }));
       return c; } },
   { key: "almost", label: "Почти Keystone Hero", sub: "Друид-танк, 2 380 M+",
-    make: () => { const c = normalizeManual({ source: "demo", name: "Корнеплёт", className: "Druid", spec: "Guardian", role: "TANK", race: "Tauren", realm: "Silvermoon", region: "EU", level: 90, ilvl: 326, score: 2380, raid: "h8" });
+    make: () => { const c = normalizeManual({ source: "demo", name: "Корнеплёт", className: "Druid", spec: "Guardian", role: "TANK", race: "Tauren", realm: "Silvermoon", region: "EU", level: 90, ilvl: 326, score: 2380, raid: "h8", achPts: 24615, mounts: 287 });
       c.raids["the-tidebound-grotto"] = { n: 1, h: 1, m: 0, total: 1 }; c.raids["the-unbinding-of-kithix"] = { n: 1, h: 0, m: 0, total: 1 };
       c.gear = demoGear(326, { tier: 4 }); c.mplus.best = [["DON", 13, 1], ["KR", 12, 1], ["MR", 13, 1], ["AOF", 12, 0], ["TOS", 13, 1], ["BV", 12, 1], ["RLP", 12, 1], ["VSA", 11, 1]].map(([s, l, t]) => ({ dungeon: s, short: s, level: l, timed: Boolean(t) })); return c; } },
   { key: "top", label: "Топ сезона", sub: "Маг, 3 320 M+, 8/8 мифик",
-    make: () => { const c = normalizeManual({ source: "demo", name: "Чароплёт", className: "Mage", spec: "Frost", role: "DPS", race: "Void Elf", realm: "Tarren Mill", region: "EU", level: 90, ilvl: 340, score: 3320, raid: "m8" });
+    make: () => { const c = normalizeManual({ source: "demo", name: "Чароплёт", className: "Mage", spec: "Frost", role: "DPS", race: "Void Elf", realm: "Tarren Mill", region: "EU", level: 90, ilvl: 340, score: 3320, raid: "m8", achPts: 38920, mounts: 512 });
       c.raids["the-tidebound-grotto"] = { n: 1, h: 1, m: 1, total: 1 }; c.raids["the-unbinding-of-kithix"] = { n: 1, h: 1, m: 1, total: 1 };
       c.gear = demoGear(340, { tier: 4 }); c.mplus.best = [["DON", 19, 1], ["KR", 19, 1], ["MR", 18, 1], ["AOF", 19, 1], ["TOS", 18, 1], ["BV", 19, 1], ["RLP", 18, 1], ["VSA", 18, 1]].map(([s, l, t]) => ({ dungeon: s, short: s, level: l, timed: Boolean(t) })); return c; } },
 ];
@@ -1127,6 +1275,7 @@ function init() {
   document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => switchTab(t.dataset.tab)));
   $("#form-live").addEventListener("submit", (e) => { e.preventDefault(); runLive(); });
   $("#form-manual").addEventListener("submit", (e) => { e.preventDefault(); runManual(); });
+  $("#result").addEventListener("submit", (e) => { if (e.target.id === "coll-form") { e.preventDefault(); refineMounts(); } });
   $("#demo-list").addEventListener("click", (e) => { const b = e.target.closest("[data-demo]"); if (b) runDemo(b.dataset.demo); });
   // Вставка ссылки в поле имени сразу раскладывается по полям
   $("#f-name").addEventListener("paste", () => setTimeout(() => {
