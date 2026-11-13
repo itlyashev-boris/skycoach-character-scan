@@ -1,0 +1,1162 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>WoW Character Scan</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Анализ персонажа World of Warcraft: экипировка, рейтинг Mythic+, рейды и персональные рекомендации услуг SkyCoach. Прототип для тестового задания.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: armory sheet — search strip on top, then a two-column "character sheet" (who + numbers) beside "what next" (cross-sell). Dark single theme on purpose: game UI world. */
+:root {
+  color-scheme: dark;
+  --bg: #0f1218;
+  --panel: #161b24;
+  --panel-2: #1c2330;
+  --line: #2a3242;
+  --fg: #e8ecf3;
+  --muted: #8f9ab0;
+  --accent: #f0b54a;        /* warm brass, close to WoW UI gold */
+  --accent-ink: #1a1305;
+  --good: #4cc38a;
+  --warn: #f0b54a;
+  --bad: #ef6b5b;
+  --info: #6aa8ff;
+  /* item-quality palette, used for item level tracks */
+  --q-poor: #9d9d9d;
+  --q-uncommon: #2fd65a;
+  --q-rare: #3d8ef0;
+  --q-epic: #b55cf2;
+  --q-legendary: #ff8a1f;
+  --font-display: "Unbounded", "Manrope", system-ui, sans-serif;
+  --font-body: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --r: 10px;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--fg); }
+body {
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 48px;
+}
+a { color: var(--accent); }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 20px; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h2 { font-family: var(--font-display); font-weight: 500; font-size: 17px; letter-spacing: .01em; }
+
+/* top bar */
+.topbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-block: 20px 4px; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark { width: 36px; height: 36px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: 15px; }
+.brand h1 { font-family: var(--font-display); font-weight: 700; font-size: 20px; }
+.brand p { margin: 0; font-size: 12px; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.chip.accent { border-color: color-mix(in srgb, var(--accent) 50%, transparent); color: var(--accent); }
+
+/* search */
+.search { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: grid; gap: 14px; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.tab { background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 12px; cursor: pointer; color: var(--muted); font-weight: 600; }
+.tab[aria-selected="true"] { background: var(--panel-2); border-color: var(--line); color: var(--fg); }
+.form-row { display: grid; grid-template-columns: 110px 1fr 1fr auto; gap: 10px; align-items: end; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field label { font-size: 12px; color: var(--muted); font-weight: 600; }
+.field input, .field select { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; width: 100%; min-width: 0; }
+.field input:focus, .field select:focus { border-color: var(--accent); outline: none; }
+.field .hint { font-size: 12px; color: var(--muted); }
+.field.invalid input { border-color: var(--bad); }
+.field .err { font-size: 12px; color: var(--bad); }
+.btn { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 10px 18px; font-weight: 800; cursor: pointer; white-space: nowrap; }
+.btn:disabled { opacity: .6; cursor: progress; }
+.btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); font-weight: 600; }
+.manual-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.demo-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.demo-card { text-align: left; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; cursor: pointer; display: grid; gap: 2px; }
+.demo-card:hover { border-color: var(--accent); }
+.demo-card b { font-size: 14px; }
+.demo-card span { font-size: 12px; color: var(--muted); }
+
+/* notices */
+.notice { border: 1px solid var(--line); border-left-width: 4px; border-radius: 8px; padding: 12px 14px; background: var(--panel); display: grid; gap: 6px; }
+.notice.bad { border-left-color: var(--bad); }
+.notice.warn { border-left-color: var(--warn); }
+.notice.info { border-left-color: var(--info); }
+.notice b { font-weight: 700; }
+.notice ul { margin: 0; padding-left: 18px; }
+.notice .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.link-btn { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+
+/* result layout */
+.result { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.col { display: grid; gap: 20px; min-width: 0; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+
+/* hero */
+.hero { display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center; }
+.avatar { width: 72px; height: 72px; border-radius: 12px; border: 2px solid var(--cls, var(--line)); background: var(--panel-2); display: grid; place-items: center; overflow: hidden; font-family: var(--font-display); font-size: 26px; color: var(--cls, var(--fg)); }
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.who { min-width: 0; display: grid; gap: 2px; }
+.who h2 { font-size: 24px; font-weight: 700; overflow-wrap: anywhere; color: var(--cls, var(--fg)); }
+.who .meta { color: var(--muted); font-size: 14px; }
+.source-tag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); justify-self: start; }
+.ring { position: relative; width: 104px; height: 104px; }
+.ring svg { transform: rotate(-90deg); }
+.ring .val { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; line-height: 1.1; }
+.ring .val b { font-family: var(--font-display); font-size: 26px; }
+.ring .val span { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+
+/* stats */
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.stat { background: var(--panel-2); border-radius: 8px; padding: 12px; display: grid; gap: 4px; min-width: 0; }
+.stat .v { font-family: var(--font-mono); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat .s { font-size: 12px; color: var(--muted); }
+.bars { display: grid; gap: 8px; }
+.bar-row { display: grid; grid-template-columns: 130px 1fr 40px; gap: 10px; align-items: center; font-size: 13px; }
+.bar { height: 8px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+
+/* gear */
+.gear-wrap { overflow-x: auto; }
+table.gear { width: 100%; border-collapse: collapse; font-size: 13px; }
+.gear th { text-align: left; font-weight: 700; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.gear td { padding: 7px 8px; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); vertical-align: middle; }
+.gear td.name { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gear tr.weak td { background: color-mix(in srgb, var(--bad) 8%, transparent); }
+.pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.pill.good { color: var(--good); } .pill.bad { color: var(--bad); } .pill.mut { color: var(--muted); } .pill.warn { color: var(--warn); }
+.t-adv { color: var(--q-poor); } .t-vet { color: var(--q-uncommon); } .t-cha { color: var(--q-rare); } .t-her { color: var(--q-epic); } .t-myt { color: var(--q-legendary); }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: currentColor; margin-right: 6px; }
+
+/* raids & runs */
+.raid-list { display: grid; gap: 10px; }
+.raid { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; align-items: center; }
+.diff { display: flex; gap: 4px; }
+.diff span { font-family: var(--font-mono); font-size: 12px; padding: 2px 6px; border-radius: 4px; background: var(--panel-2); color: var(--muted); }
+.diff span.full { background: color-mix(in srgb, var(--good) 20%, transparent); color: var(--good); }
+.diff span.part { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.runs { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.run { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; display: grid; gap: 2px; }
+.run b { font-family: var(--font-mono); font-size: 18px; }
+.run.depleted b { color: var(--muted); }
+
+/* recommendations */
+.reco-list { display: grid; gap: 12px; }
+.reco { border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 8px; background: var(--panel-2); }
+.reco.top { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.reco-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.reco h3 { font-size: 15px; font-weight: 800; }
+.prio { font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+.prio.p1 { background: var(--accent); color: var(--accent-ink); }
+.prio.p2 { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
+.prio.p3 { background: var(--panel); color: var(--muted); border: 1px solid var(--line); }
+.reco p { margin: 0; font-size: 14px; }
+.reco .why { color: var(--muted); font-size: 13px; }
+.reco .gain { font-size: 13px; }
+.reco .gain b { color: var(--good); }
+.reco .cta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cta-link { display: inline-flex; align-items: center; gap: 6px; background: var(--accent); color: var(--accent-ink); text-decoration: none; font-weight: 800; font-size: 13px; padding: 8px 12px; border-radius: 7px; }
+.cta-link.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); font-weight: 600; }
+.bundle { border: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent); border-radius: var(--r); padding: 14px; display: grid; gap: 8px; }
+.bundle ul { margin: 0; padding-left: 18px; font-size: 14px; }
+.member { background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 16%, var(--panel)), var(--panel) 70%); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: var(--r); padding: 16px; display: grid; gap: 8px; }
+.member ul { margin: 0; padding-left: 18px; font-size: 14px; }
+.tips { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.tips li { font-size: 14px; display: grid; grid-template-columns: 18px 1fr; gap: 8px; }
+.tips li::before { content: "✓"; color: var(--good); font-weight: 800; }
+
+/* analytics log */
+details.events { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 16px; }
+details.events summary { cursor: pointer; font-weight: 700; }
+.log { font-family: var(--font-mono); font-size: 12px; display: grid; gap: 4px; margin-top: 10px; max-height: 260px; overflow: auto; }
+.log div { overflow-wrap: anywhere; }
+footer { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
+
+/* loading skeleton */
+.loading { display: flex; align-items: center; gap: 12px; padding: 24px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); }
+.spin { width: 20px; height: 20px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
+@media (max-width: 920px) {
+  .result { grid-template-columns: 1fr; }
+}
+@media (max-width: 680px) {
+  .form-row { grid-template-columns: 1fr 1fr; }
+  .form-row .field.name, .form-row .btn { grid-column: span 2; }
+  .manual-grid { grid-template-columns: 1fr 1fr; }
+  .stats { grid-template-columns: 1fr 1fr; }
+  .hero { grid-template-columns: auto 1fr; }
+  .hero .ring { grid-column: span 2; justify-self: start; }
+  .bar-row { grid-template-columns: 100px 1fr 36px; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">CS</div>
+      <div>
+        <h1>Character Scan</h1>
+        <p>Прототип для тестового задания SkyCoach · неофициальный сервис</p>
+      </div>
+    </div>
+    <div class="chips">
+      <span class="chip accent" id="season-chip">Midnight · Season 2</span>
+      <span class="chip">Данные: Raider.IO</span>
+    </div>
+  </header>
+
+  <section class="search" aria-label="Поиск персонажа">
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-live" aria-selected="true" data-tab="live">По имени</button>
+      <button class="tab" role="tab" id="tab-manual" aria-selected="false" data-tab="manual">Ввести вручную</button>
+      <button class="tab" role="tab" id="tab-demo" aria-selected="false" data-tab="demo">Демо-персонажи</button>
+    </div>
+
+    <form id="form-live" data-pane="live" novalidate>
+      <div class="form-row">
+        <div class="field">
+          <label for="f-region">Регион</label>
+          <select id="f-region">
+            <option value="eu">EU</option>
+            <option value="us">US</option>
+            <option value="kr">KR</option>
+            <option value="tw">TW</option>
+          </select>
+        </div>
+        <div class="field" id="fld-realm">
+          <label for="f-realm">Сервер</label>
+          <input id="f-realm" autocomplete="off" placeholder="Например, Ravencrest или Гордунни">
+          <div class="err" id="err-realm" hidden></div>
+        </div>
+        <div class="field name" id="fld-name">
+          <label for="f-name">Имя персонажа или ссылка</label>
+          <input id="f-name" autocomplete="off" placeholder="Имя или ссылка на raider.io / worldofwarcraft.com">
+          <div class="err" id="err-name" hidden></div>
+        </div>
+        <button class="btn" id="btn-scan" type="submit">Проверить</button>
+      </div>
+      <div class="hint small muted" style="margin-top:8px">Персонаж должен быть 90 уровня и заходить в игру после старта сезона: только такие профили есть в Raider.IO. Для остальных есть ручной ввод.</div>
+    </form>
+
+    <form id="form-manual" data-pane="manual" novalidate hidden>
+      <div class="manual-grid">
+        <div class="field"><label for="m-name">Имя (необязательно)</label><input id="m-name" placeholder="Мой персонаж" maxlength="24"></div>
+        <div class="field"><label for="m-class">Класс</label><select id="m-class"></select></div>
+        <div class="field"><label for="m-role">Роль</label>
+          <select id="m-role"><option value="DPS">Боец (DPS)</option><option value="TANK">Танк</option><option value="HEALING">Лекарь</option></select></div>
+        <div class="field" id="mf-level"><label for="m-level">Уровень</label><input id="m-level" type="number" inputmode="numeric" min="1" max="90" value="90"><div class="err" hidden></div></div>
+        <div class="field" id="mf-ilvl"><label for="m-ilvl">Уровень предметов</label><input id="m-ilvl" type="number" inputmode="numeric" min="1" max="400" placeholder="например, 305"><div class="err" hidden></div></div>
+        <div class="field" id="mf-score"><label for="m-score">Рейтинг M+</label><input id="m-score" type="number" inputmode="numeric" min="0" max="5000" placeholder="0, если не играли"><div class="err" hidden></div></div>
+        <div class="field"><label for="m-raid">Бездна Яда (The Venomous Abyss)</label>
+          <select id="m-raid">
+            <option value="0">Не ходил</option>
+            <option value="n4">Обычный, часть боссов</option>
+            <option value="n8">Обычный 8/8</option>
+            <option value="h4">Героик, часть боссов</option>
+            <option value="h8">Героик 8/8</option>
+            <option value="m4">Мифик, часть боссов</option>
+            <option value="m8">Мифик 8/8</option>
+          </select></div>
+        <div class="field"><label for="m-tier">Частей тир-сета</label>
+          <select id="m-tier"><option value="">Не знаю</option><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center">
+        <button class="btn" type="submit">Проанализировать</button>
+        <span class="small muted">Подходит для персонажей ниже 90 уровня, закрытых профилей и случаев, когда Raider.IO недоступен.</span>
+      </div>
+    </form>
+
+    <div data-pane="demo" hidden>
+      <div class="demo-list" id="demo-list"></div>
+      <p class="small muted" style="margin:10px 0 0">Вымышленные персонажи на разных стадиях сезона. Показывают, как меняются рекомендации.</p>
+    </div>
+  </section>
+
+  <div id="notices" style="display:grid;gap:12px"></div>
+  <main id="result" aria-live="polite"></main>
+
+  <details class="events" id="events">
+    <summary>События аналитики (для проверки воронки)</summary>
+    <div class="small muted" style="margin-top:6px">Так сервис отправлял бы события в аналитику: поиск → результат → показ рекомендаций → клик. Ссылки на услуги несут UTM-метки с id правила.</div>
+    <div class="log" id="log"></div>
+  </details>
+
+  <footer>
+    <div>Данные о персонаже: публичный API Raider.IO (обновляется после входа в игру). Пороги уровня предметов и рейтинга даны ориентировочно для Midnight Season 2.</div>
+    <div>Character Scan не связан с Blizzard Entertainment, Raider.IO и SkyCoach. Это демонстрационный прототип.</div>
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   1. Конфигурация сезона. Ориентировочные значения, правятся в одном месте.
+   ============================================================ */
+const CONFIG = {
+  season: "Midnight Season 2",
+  seasonSlug: "season-mn-2",
+  maxLevel: 90,
+  tierId: "36",                 // id тир-сета текущего сезона в ответе Raider.IO
+  ilvlCap: 344,
+  // Треки улучшений (после повышения уровня предметов во 2-м сезоне), приблизительно
+  tracks: [
+    { id: "adv", name: "Искатель приключений", min: 0,   cls: "t-adv" },
+    { id: "vet", name: "Ветеран",              min: 286, cls: "t-vet" },
+    { id: "cha", name: "Чемпион",              min: 299, cls: "t-cha" },
+    { id: "her", name: "Герой",                min: 312, cls: "t-her" },
+    { id: "myt", name: "Легенда (Myth)",       min: 325, cls: "t-myt" },
+  ],
+  ilvlGates: { freshMax: 90, normal: 295, heroic: 310, mythic: 328 },
+  mplusTiers: [
+    { min: 0,    name: "Без рейтинга" },
+    { min: 1,    name: "Начало пути" },
+    { min: 2000, name: "Keystone Master" },
+    { min: 2500, name: "Keystone Hero" },
+    { min: 3000, name: "Keystone Legend" },
+    { min: 3500, name: "Keystone Myth" },
+  ],
+  raids: [
+    { slug: "the-venomous-abyss",     name: "The Venomous Abyss",      ru: "Бездна Яда", bosses: 8, main: true },
+    { slug: "the-tidebound-grotto",   name: "The Tidebound Grotto",    ru: "Грот Приливов", bosses: 1 },
+    { slug: "the-unbinding-of-kithix", name: "The Unbinding of Kith'ix", ru: "Освобождение Кит'икса", bosses: 1 },
+  ],
+  enchantSlots: ["head", "shoulder", "chest", "legs", "feet", "finger1", "finger2", "mainhand"],
+  weakSlotGap: 12,          // слот ниже среднего на столько уровней считается слабым
+  staleDays: 14,
+  bundleDiscount: 10,       // % скидки на пакет (пример механики)
+  memberDiscount: 7,        // % скидки подписчика (концепт Skycoach Membership)
+  fetchTimeoutMs: 12000,
+  cacheTtlMs: 10 * 60 * 1000,
+};
+
+/* Каталог услуг: реальные разделы skycoach.gg (по состоянию на ноябрь 2026). */
+const SKY = "https://skycoach.gg";
+const SERVICES = {
+  leveling:     { title: "Прокачка до 90 уровня",          path: "/wow-boost/products/leveling-9797",                         cat: "Прокачка" },
+  campaigns:    { title: "Кампании Midnight",               path: "/wow-boost/products/midnight-campaigns-9904",               cat: "Прокачка" },
+  fullgear:     { title: "Полный комплект экипировки",      path: "/wow-boost/products/wow-full-gear-507",                     cat: "Экипировка" },
+  delves:       { title: "Вылазки (Delves)",                path: "/wow-boost/products/wow-delves-boost-4570",                 cat: "Вылазки" },
+  crafting:     { title: "Крафт экипировки",                path: "/wow-boost/products/gear-crafting-8890",                    cat: "Экипировка" },
+  crests:       { title: "Фарм гребней (Mistcrests)",       path: "/wow-boost/products/mistcrests-10823",                      cat: "Экипировка" },
+  mplus_start:  { title: "Mythic+ ключи 2–20",              path: "/wow-boost/products/mythic-10-4490",                        cat: "Mythic+" },
+  ksm:          { title: "Keystone Master, сезон 2",        path: "/wow-boost/products/keystone-master-9809",                  cat: "Mythic+" },
+  ksh:          { title: "Keystone Hero, сезон 2",          path: "/wow-boost/products/keystone-hero-951",                     cat: "Mythic+" },
+  ksl:          { title: "Keystone Legend, сезон 2",        path: "/wow-boost/products/keystone-legend-7060",                  cat: "Mythic+" },
+  ksmyth:       { title: "Keystone Myth, сезон 2",          path: "/wow-boost/products/keystone-myth-10403",                   cat: "Mythic+" },
+  mplus_bundle: { title: "Mythic+ пакет 3+1 бесплатно",     path: "/wow-boost/products/mythic-3-1-bundle-3593",                cat: "Mythic+" },
+  va_heroic:    { title: "The Venomous Abyss, героик",      path: "/wow-boost/products/the-venomous-abyss-heroic-10765",       cat: "Рейды" },
+  aotc:         { title: "Ahead of the Curve",              path: "/wow-boost/products/ahead-of-the-curve-1668",               cat: "Рейды" },
+  va_single:    { title: "Отдельные боссы Venomous Abyss",  path: "/wow-boost/products/the-venomous-abyss-single-bosses-10780", cat: "Рейды" },
+  va_mythic:    { title: "The Venomous Abyss, мифик",       path: "/wow-boost/products/the-venomous-abyss-mythic-10766",       cat: "Рейды" },
+  all_raids:    { title: "Пакет «Все рейды сезона»",        path: "/wow-boost/products/all-raids-bundle-11370",                cat: "Рейды" },
+  kithix:       { title: "The Unbinding of Kith'ix",        path: "/wow-boost/raids/the-unbinding-of-kithix",                  cat: "Рейды" },
+  raid_key:     { title: "Рейд + ключ M+10",                path: "/wow-boost/products/raid-plus-mythic-key-bundle-3596",      cat: "Пакеты" },
+  mounts:       { title: "Маунты и коллекции",              path: "/wow-boost/mounts",                                          cat: "Коллекции" },
+  glory:        { title: "Glory of the Venomous Abyss Raider", path: "/wow-boost/products/glory-of-the-venomous-abyss-raider-10793", cat: "Достижения" },
+  coaching:     { title: "Коучинг с про-игроком",           path: "/wow-boost/powerleveling",                                   cat: "Коучинг" },
+  pvp:          { title: "PvP: Solo Shuffle",               path: "/wow-boost/products/solo-shuffle-2085",                     cat: "PvP" },
+};
+
+const CLASSES = {
+  "Death Knight": { ru: "Рыцарь смерти", color: "#C41E3A" },
+  "Demon Hunter": { ru: "Охотник на демонов", color: "#A330C9" },
+  "Druid":        { ru: "Друид", color: "#FF7C0A" },
+  "Evoker":       { ru: "Пробудитель", color: "#33937F" },
+  "Hunter":       { ru: "Охотник", color: "#AAD372" },
+  "Mage":         { ru: "Маг", color: "#3FC7EB" },
+  "Monk":         { ru: "Монах", color: "#00FF98" },
+  "Paladin":      { ru: "Паладин", color: "#F48CBA" },
+  "Priest":       { ru: "Жрец", color: "#FFFFFF" },
+  "Rogue":        { ru: "Разбойник", color: "#FFF468" },
+  "Shaman":       { ru: "Шаман", color: "#0070DD" },
+  "Warlock":      { ru: "Чернокнижник", color: "#8788EE" },
+  "Warrior":      { ru: "Воин", color: "#C69B6D" },
+};
+const ROLE_RU = { DPS: "боец", TANK: "танк", HEALING: "лекарь" };
+const SLOT_RU = {
+  head: "Голова", neck: "Шея", shoulder: "Плечи", back: "Спина", chest: "Грудь", waist: "Пояс",
+  wrist: "Запястья", hands: "Кисти рук", legs: "Ноги", feet: "Ступни", finger1: "Кольцо 1",
+  finger2: "Кольцо 2", trinket1: "Аксессуар 1", trinket2: "Аксессуар 2", mainhand: "Правая рука", offhand: "Левая рука",
+};
+const SLOT_ORDER = Object.keys(SLOT_RU);
+
+/* ============================================================
+   2. Утилиты
+   ============================================================ */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const num = (v) => (v === "" || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v));
+const fmt = (n, d = 0) => (n === null || n === undefined ? "—" : Number(n).toLocaleString("ru-RU", { maximumFractionDigits: d, minimumFractionDigits: d }));
+const plural = (n, one, few, many) => { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many; };
+const fmtIlvl = (n) => (n === null || n === undefined ? "—" : Number.isInteger(n) ? String(n) : fmt(n, 1));
+const daysAgo = (d) => (d ? Math.floor((Date.now() - d.getTime()) / 86400000) : null);
+
+function store(key, val) { try { if (val === undefined) return JSON.parse(localStorage.getItem(key) || "null"); localStorage.setItem(key, JSON.stringify(val)); } catch (e) { return null; } }
+
+/* Аналитика: в проде это был бы трекер (Amplitude / GA4). Здесь — журнал на странице. */
+function track(event, props = {}) {
+  const row = document.createElement("div");
+  const t = new Date().toLocaleTimeString("ru-RU");
+  row.textContent = `${t}  ${event}  ${JSON.stringify(props)}`;
+  $("#log").prepend(row);
+  try { console.info("[track]", event, props); } catch (e) {}
+}
+
+function serviceUrl(id, ruleId) {
+  const s = SERVICES[id];
+  const u = new URL(SKY + s.path);
+  u.searchParams.set("utm_source", "character_scan");
+  u.searchParams.set("utm_medium", "crosssell");
+  u.searchParams.set("utm_campaign", "wow_mn_s2");
+  u.searchParams.set("utm_content", ruleId);
+  return u.toString();
+}
+
+/* ============================================================
+   3. Разбор ввода: сервер, имя, ссылки
+   ============================================================ */
+const RU_TRANSLIT = { а:"a",б:"b",в:"v",г:"g",д:"d",е:"e",ё:"e",ж:"zh",з:"z",и:"i",й:"i",к:"k",л:"l",м:"m",н:"n",о:"o",п:"p",р:"r",с:"s",т:"t",у:"u",ф:"f",х:"kh",ц:"ts",ч:"ch",ш:"sh",щ:"shch",ъ:"",ы:"y",ь:"",э:"e",ю:"yu",я:"ya" };
+
+function realmSlug(raw) {
+  return String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[’'`´]/g, "")          // Kel'Thuzad → kelthuzad
+    .replace(/[()]/g, "")
+    .replace(/\s+/g, "-")             // Twisting Nether → twisting-nether
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+function translit(slug) { return slug.split("").map((ch) => (ch in RU_TRANSLIT ? RU_TRANSLIT[ch] : ch)).join(""); }
+
+/* raider.io/characters/eu/ravencrest/Name  |  worldofwarcraft.com/en-gb/character/eu/ravencrest/name */
+function parseProfileUrl(text) {
+  const s = String(text || "").trim();
+  if (!/^https?:\/\//i.test(s) && !/(raider\.io|worldofwarcraft\.com|blizzard\.com)/i.test(s)) return null;
+  let u;
+  try { u = new URL(/^https?:\/\//i.test(s) ? s : "https://" + s); } catch (e) { return { error: "bad_url" }; }
+  const parts = u.pathname.split("/").filter(Boolean).map((p) => decodeURIComponent(p));
+  const i = parts.findIndex((p) => p === "characters" || p === "character");
+  if (i === -1 || parts.length < i + 4) return { error: "bad_url" };
+  const region = parts[i + 1].toLowerCase();
+  if (!["eu", "us", "kr", "tw"].includes(region)) return { error: "bad_region" };
+  return { region, realm: parts[i + 2], name: parts[i + 3] };
+}
+
+function validateName(name) {
+  const n = String(name || "").trim();
+  if (!n) return "Введите имя персонажа.";
+  if (n.length < 2 || n.length > 12) return "В WoW имя персонажа содержит от 2 до 12 букв.";
+  if (!/^[\p{L}]+$/u.test(n)) return "Имя состоит только из букв, без пробелов, цифр и символов.";
+  return null;
+}
+
+/* ============================================================
+   4. Загрузка из Raider.IO с таймаутом, кэшем и разбором ошибок
+   ============================================================ */
+const RIO_FIELDS = [
+  "gear", `mythic_plus_scores_by_season:current`, "mythic_plus_best_runs", "mythic_plus_recent_runs",
+  "raid_progression", `raid_achievement_curve:the-venomous-abyss`, "guild",
+].join(",");
+
+class ScanError extends Error { constructor(code, message, extra = {}) { super(message); this.code = code; Object.assign(this, extra); } }
+
+async function fetchRio(region, realm, name) {
+  const key = `rio:${region}:${realm}:${name.toLowerCase()}`;
+  const cached = store(key);
+  if (cached && Date.now() - cached.t < CONFIG.cacheTtlMs) return { data: cached.d, cached: true };
+
+  const url = `https://raider.io/api/v1/characters/profile?region=${encodeURIComponent(region)}&realm=${encodeURIComponent(realm)}&name=${encodeURIComponent(name)}&fields=${encodeURIComponent(RIO_FIELDS)}`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), CONFIG.fetchTimeoutMs);
+  let res;
+  try {
+    res = await fetch(url, { signal: ctrl.signal });
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === "AbortError") throw new ScanError("timeout", "Raider.IO не ответил за 12 секунд.");
+    throw new ScanError("network", "Не удалось связаться с Raider.IO.");
+  }
+  clearTimeout(timer);
+  if (res.status === 429) throw new ScanError("rate_limit", "Слишком много запросов к Raider.IO.");
+  if (res.status >= 500) throw new ScanError("upstream", `Raider.IO вернул ошибку ${res.status}.`);
+  let body;
+  try { body = await res.json(); } catch (e) { throw new ScanError("bad_json", "Raider.IO вернул неожиданный ответ."); }
+  if (res.status === 400 || res.status === 404) {
+    const msg = String(body && body.message || "");
+    if (/realm/i.test(msg)) throw new ScanError("realm_not_found", msg);
+    throw new ScanError("not_found", msg || "Персонаж не найден.");
+  }
+  if (!res.ok) throw new ScanError("upstream", `Raider.IO вернул ошибку ${res.status}.`);
+  store(key, { t: Date.now(), d: body });
+  return { data: body, cached: false };
+}
+
+/* Если персонаж не найден: пробуем транслит русского сервера и соседние регионы. */
+async function scanLive(region, realmRaw, name) {
+  const slug = realmSlug(realmRaw);
+  const tries = [slug];
+  if (/[а-яё]/i.test(slug)) tries.push(translit(slug));
+  let lastErr;
+  for (const r of tries) {
+    try { return { ...(await fetchRio(region, r, name)), region, realm: r }; }
+    catch (e) { lastErr = e; if (!["not_found", "realm_not_found"].includes(e.code)) throw e; }
+  }
+  // Подсказка «не тот регион»: параллельно ищем в остальных регионах
+  const others = ["eu", "us", "kr", "tw"].filter((r) => r !== region);
+  const found = await Promise.all(others.map(async (r) => {
+    try { await fetchRio(r, tries[tries.length - 1], name); return r; } catch (e) { return null; }
+  }));
+  const alt = found.find(Boolean);
+  throw new ScanError(lastErr.code, lastErr.message, { altRegion: alt || null, triedRealm: tries.join(" / ") });
+}
+
+/* ============================================================
+   5. Нормализация: Raider.IO / ручной ввод → единая модель персонажа
+   ============================================================ */
+function normalizeRio(raw) {
+  const items = raw.gear && raw.gear.items ? raw.gear.items : null;
+  const gear = items ? SLOT_ORDER.filter((s) => items[s]).map((slot) => {
+    const it = items[slot];
+    const enchantable = CONFIG.enchantSlots.includes(slot);
+    return {
+      slot, name: it.name, ilvl: num(it.item_level), quality: it.item_quality,
+      enchanted: enchantable ? Boolean(it.enchant || (it.enchants && it.enchants.length)) : null,
+      tier: String(it.tier || "") === CONFIG.tierId,
+    };
+  }) : null;
+
+  const season = (raw.mythic_plus_scores_by_season || []).find((s) => s.season === CONFIG.seasonSlug) || (raw.mythic_plus_scores_by_season || [])[0];
+  const score = season ? num(season.scores && season.scores.all) : null;
+  const color = season && season.segments && season.segments.all ? season.segments.all.color : null;
+
+  const raids = {};
+  for (const r of CONFIG.raids) {
+    const p = raw.raid_progression && raw.raid_progression[r.slug];
+    raids[r.slug] = p ? { n: p.normal_bosses_killed, h: p.heroic_bosses_killed, m: p.mythic_bosses_killed, total: p.total_bosses } : { n: 0, h: 0, m: 0, total: r.bosses };
+  }
+  const curve = (raw.raid_achievement_curve || []).find((c) => c.raid === "the-venomous-abyss");
+
+  return {
+    source: "raiderio",
+    name: raw.name, realm: raw.realm, region: (raw.region || "").toUpperCase(),
+    className: raw.class, spec: raw.active_spec_name, role: raw.active_spec_role,
+    race: raw.race, faction: raw.faction,
+    level: CONFIG.maxLevel,   // Raider.IO индексирует только персонажей максимального уровня
+    thumb: raw.thumbnail_url, profileUrl: raw.profile_url,
+    guild: raw.guild ? raw.guild.name : null,
+    updatedAt: raw.last_crawled_at ? new Date(raw.last_crawled_at) : null,
+    ilvl: raw.gear && num(raw.gear.item_level_equipped) ? Math.round(num(raw.gear.item_level_equipped) * 10) / 10 : null,
+    gear,
+    mplus: {
+      score, color,
+      best: (raw.mythic_plus_best_runs || []).map((r) => ({ dungeon: r.dungeon, short: r.short_name, level: r.mythic_level, timed: r.num_keystone_upgrades > 0 })),
+      recentCount: (raw.mythic_plus_recent_runs || []).length,
+    },
+    raids,
+    aotc: curve ? Boolean(curve.aotc) : null,
+    ce: curve ? Boolean(curve.cutting_edge) : null,
+  };
+}
+
+function normalizeManual(f) {
+  const raidMap = { "0": [0, 0, 0], n4: [4, 0, 0], n8: [8, 0, 0], h4: [8, 4, 0], h8: [8, 8, 0], m4: [8, 8, 4], m8: [8, 8, 8] };
+  const [n, h, m] = raidMap[f.raid] || [0, 0, 0];
+  const raids = {};
+  for (const r of CONFIG.raids) raids[r.slug] = r.main ? { n, h, m, total: 8 } : null;
+  return {
+    source: f.source || "manual",
+    name: f.name || "Мой персонаж", realm: f.realm || null, region: f.region || null,
+    className: f.className, spec: f.spec || null, role: f.role, race: f.race || null,
+    level: f.level, thumb: null, profileUrl: null, guild: null, updatedAt: null,
+    ilvl: f.ilvl, gear: f.gear || null, tierManual: f.tier,
+    mplus: { score: f.score, color: null, best: f.best || [], recentCount: null },
+    raids, aotc: h >= 8 ? true : (f.raid === "0" ? false : null), ce: m >= 8 ? true : null,
+  };
+}
+
+/* ============================================================
+   6. Анализ и движок рекомендаций (кросс-сейл)
+   ============================================================ */
+function trackOf(ilvl) {
+  if (ilvl === null) return null;
+  return [...CONFIG.tracks].reverse().find((t) => ilvl >= t.min);
+}
+function mplusTier(score) {
+  if (score === null) return null;
+  return [...CONFIG.mplusTiers].reverse().find((t) => score >= t.min);
+}
+function nextMplusTier(score) { return CONFIG.mplusTiers.find((t) => t.min > (score || 0) && t.min > 1) || null; }
+
+function analyze(ch) {
+  const lvl = ch.level ?? CONFIG.maxLevel;
+  const ilvl = ch.ilvl;
+  const score = ch.mplus.score;
+  const va = ch.raids["the-venomous-abyss"] || { n: 0, h: 0, m: 0, total: 8 };
+
+  // --- состояние экипировки
+  let tierPieces = ch.gear ? ch.gear.filter((g) => g.tier).length : num(ch.tierManual);
+  const missingEnchants = ch.gear ? ch.gear.filter((g) => g.enchanted === false).map((g) => g.slot) : null;
+  let weakSlots = [];
+  if (ch.gear && ch.gear.length && ilvl) {
+    weakSlots = ch.gear.filter((g) => g.ilvl !== null && ilvl - g.ilvl >= CONFIG.weakSlotGap).map((g) => g.slot);
+  }
+  const emptySlots = ch.gear ? SLOT_ORDER.filter((s) => s !== "offhand" && !ch.gear.find((g) => g.slot === s)) : [];
+
+  // --- индекс готовности к сезону 0..100
+  const parts = [];
+  if (lvl < CONFIG.maxLevel) {
+    parts.push({ k: "Уровень персонажа", v: clamp(lvl / CONFIG.maxLevel) });
+  } else {
+    parts.push({ k: "Экипировка", v: ilvl === null ? null : clamp((ilvl - 280) / (CONFIG.ilvlCap - 2 - 280)), w: 0.35 });
+    parts.push({ k: "Mythic+", v: score === null ? null : clamp(score / 3000), w: 0.30 });
+    parts.push({ k: "Рейд", v: clamp((va.n * 1 + va.h * 2 + va.m * 3) / (8 * 6)), w: 0.25 });
+    const enchantShare = missingEnchants ? 1 - missingEnchants.length / CONFIG.enchantSlots.length : null;
+    const polish = tierPieces === null && enchantShare === null ? null
+      : (tierPieces === null ? enchantShare : enchantShare === null ? clamp(tierPieces / 4) : clamp(tierPieces / 4) * 0.6 + enchantShare * 0.4);
+    parts.push({ k: "Тир-сет и чары", v: polish, w: 0.10 });
+  }
+  let readiness;
+  if (lvl < CONFIG.maxLevel) readiness = Math.round(clamp(lvl / CONFIG.maxLevel) * 20);
+  else {
+    const known = parts.filter((p) => p.v !== null);
+    const wsum = known.reduce((a, p) => a + p.w, 0) || 1;
+    readiness = Math.round((known.reduce((a, p) => a + p.v * p.w, 0) / wsum) * 100);
+  }
+  const stage = lvl < CONFIG.maxLevel ? "Прокачка" : readiness < 25 ? "Старт сезона" : readiness < 50 ? "В пути" : readiness < 75 ? "Уверенный середняк" : readiness < 92 ? "Сезонный ветеран" : "Топ сезона";
+
+  // --- правила. Каждое правило: id, условие, услуга, приоритет (0..100), объяснение с цифрами
+  const recos = [];
+  const tips = [];
+  const add = (r) => recos.push(r);
+  const tierName = mplusTier(score);
+  const next = nextMplusTier(score);
+
+  if (lvl < CONFIG.maxLevel) {
+    const left = CONFIG.maxLevel - lvl;
+    add({ id: "level_cap", svc: "leveling", prio: 100,
+      title: `Догнать ${CONFIG.maxLevel} уровень`,
+      why: `Персонажу ${lvl} уровень: до максимума ${left} ${plural(left, "уровень", "уровня", "уровней")}. Без ${CONFIG.maxLevel} уровня закрыты ключи, героик-рейды и награды сезона.`,
+      gain: `Доступ ко всему контенту ${CONFIG.season}` });
+    add({ id: "level_campaign", svc: "campaigns", prio: 55,
+      title: "Пройти кампании Midnight",
+      why: "Сюжетные кампании открывают репутации, полёт и локальные задания, которые нужны после прокачки.",
+      gain: "Разблокированный эндгейм" });
+    add({ id: "level_then_gear", svc: "fullgear", prio: 45,
+      title: "Сразу одеться после прокачки",
+      why: "Свежий персонаж на 90 уровне начинает примерно с 270 уровня предметов. Этого не хватит даже для обычного рейда.",
+      gain: `Уровень предметов ${CONFIG.ilvlGates.normal}+ для рейдов и ключей` });
+    return { readiness, stage, parts, recos: rank(recos), tips, tierPieces, missingEnchants, weakSlots, emptySlots };
+  }
+
+  // Экипировка
+  if (ilvl !== null && ilvl < CONFIG.ilvlGates.normal) {
+    add({ id: "gear_low", svc: "fullgear", prio: 92,
+      title: "Собрать стартовый комплект экипировки",
+      why: `Уровень предметов ${fmtIlvl(ilvl)}. Для героик-рейда и ключей +7 обычно ждут ${CONFIG.ilvlGates.heroic}+, разрыв ${Math.ceil(CONFIG.ilvlGates.heroic - ilvl)}.`,
+      gain: `+${Math.max(10, Math.ceil(CONFIG.ilvlGates.heroic - ilvl))} к уровню предметов` });
+    add({ id: "gear_low_delves", svc: "delves", prio: 60,
+      title: "Вылазки ради трека «Чемпион»",
+      why: "Вылазки высокого уровня дают экипировку и ключи сокровищницы без поиска группы.",
+      gain: "Предметы трека «Чемпион» и сундук Великого хранилища" });
+  } else if (ilvl !== null && weakSlots.length >= 2) {
+    add({ id: "gear_weak_slots", svc: "crests", prio: 58,
+      title: `Закрыть слабые слоты: ${weakSlots.map((s) => SLOT_RU[s].toLowerCase()).join(", ")}`,
+      why: `${weakSlots.length} ${plural(weakSlots.length, "слот отстаёт", "слота отстают", "слотов отстают")} от среднего уровня ${fmtIlvl(ilvl)} на ${CONFIG.weakSlotGap}+ уровней. Это самый дешёвый прирост урона и выживаемости.`,
+      gain: "Гребни на улучшение слабых предметов до трека выше" });
+  } else if (ilvl !== null && weakSlots.length === 1) {
+    add({ id: "gear_weak_slot_craft", svc: "crafting", prio: 40,
+      title: `Заменить слабый слот: ${SLOT_RU[weakSlots[0]].toLowerCase()}`,
+      why: `Слот «${SLOT_RU[weakSlots[0]]}» ниже среднего уровня предметов на ${CONFIG.weakSlotGap}+ уровней. Крафт закрывает его гарантированно.`,
+      gain: "Гарантированный предмет нужного уровня" });
+  }
+
+  // Mythic+
+  if (score === null || score === 0) {
+    if (ilvl === null || ilvl >= CONFIG.ilvlGates.normal - 5) {
+      add({ id: "mplus_start", svc: "mplus_start", prio: 75,
+        title: "Начать Mythic+ в этом сезоне",
+        why: "В текущем сезоне нет закрытых ключей. Ключи дают самую быструю экипировку и награды Великого хранилища каждую неделю.",
+        gain: "Рейтинг, предметы трека «Герой» и еженедельное хранилище" });
+    }
+  } else if (next) {
+    const gap = next.min - score;
+    const svcMap = { 2000: "ksm", 2500: "ksh", 3000: "ksl", 3500: "ksmyth" };
+    const prioMap = { 2000: 80, 2500: 66, 3000: 52, 3500: 38 };
+    add({ id: `mplus_${next.min}`, svc: svcMap[next.min], prio: prioMap[next.min] + (gap <= 250 ? 8 : 0),
+      title: `Рейтинг ${fmt(next.min)}: ${next.name}`,
+      why: `Сейчас ${fmt(score)} (${tierName.name}). До порога ${fmt(next.min)} не хватает ${fmt(gap)}${gap <= 250 ? ": это 2–3 удачных ключа" : ""}.`,
+      gain: next.min === 2000 ? "Достижение, маунт сезона и предметы хранилища 315+" : `Достижение «${next.name}» и рейтинг для лучших групп` });
+  }
+  if (score !== null && score > 0 && ch.mplus.best && ch.mplus.best.length) {
+    const depleted = ch.mplus.best.filter((r) => !r.timed);
+    if (depleted.length >= 2) {
+      tips.push(`${depleted.length} из ${ch.mplus.best.length} лучших ключей не уложились в таймер (${depleted.map((r) => r.short).join(", ")}). Переход этих подземелий в таймер даёт рейтинг дешевле, чем повышение уровня ключа.`);
+    }
+  }
+
+  // Рейд
+  const vaMain = CONFIG.raids[0];
+  if (va.h < vaMain.bosses && (ilvl === null || ilvl >= CONFIG.ilvlGates.normal)) {
+    const left = vaMain.bosses - va.h;
+    add({ id: va.h === 0 ? "raid_heroic_full" : "raid_aotc", svc: va.h === 0 ? "va_heroic" : "aotc", prio: 78,
+      title: va.h === 0 ? `Полный героик ${vaMain.name}` : "Получить «Ahead of the Curve»",
+      why: `Героик пройден на ${va.h}/${vaMain.bosses}${va.n ? `, обычный на ${va.n}/${vaMain.bosses}` : ""}. Осталось ${left} ${plural(left, "босс", "босса", "боссов")}.`,
+      gain: "Тир-сет, предметы трека «Герой», достижение AOTC" });
+  } else if (va.h >= vaMain.bosses && va.m < vaMain.bosses && ilvl !== null && ilvl >= CONFIG.ilvlGates.mythic) {
+    add({ id: "raid_mythic", svc: va.m === 0 ? "va_single" : "va_mythic", prio: 42,
+      title: va.m === 0 ? "Первые мифик-боссы" : `Мифик ${vaMain.name}: ${va.m}/${vaMain.bosses} → ${vaMain.bosses}/${vaMain.bosses}`,
+      why: `Героик закрыт, уровень предметов ${fmtIlvl(ilvl)} позволяет идти в мифик. Мифик-предметы дают максимальный трек.`,
+      gain: va.m === 0 ? "Предметы трека «Легенда»" : "Cutting Edge и максимальный трек экипировки" });
+  }
+  const smallRaidsMissing = CONFIG.raids.filter((r) => !r.main && ch.raids[r.slug] && ch.raids[r.slug].h < r.bosses);
+  if (smallRaidsMissing.length && ch.source !== "manual" && (ilvl === null || ilvl >= CONFIG.ilvlGates.heroic)) {
+    const both = smallRaidsMissing.length >= 2 && va.h < vaMain.bosses;
+    add({ id: both ? "raid_all_bundle" : "raid_mini", svc: both ? "all_raids" : "kithix", prio: both ? 70 : 48,
+      title: both ? "Все рейды сезона одним пакетом" : `Мини-рейд: ${smallRaidsMissing.map((r) => r.name).join(", ")}`,
+      why: `Не закрыты на героике: ${smallRaidsMissing.map((r) => r.name).join(", ")}. Это отдельные рейды из одного босса с собственными наградами.`,
+      gain: both ? "Все рейдовые награды сезона в одном заказе" : "Уникальные предметы и достижение" });
+  }
+
+  // Тир-сет
+  if (tierPieces !== null && tierPieces < 4 && (ilvl === null || ilvl >= CONFIG.ilvlGates.normal)) {
+    const need = (tierPieces < 2 ? 2 : 4) - tierPieces;
+    add({ id: "tier_set", svc: "va_single", prio: tierPieces < 2 ? 70 : 62,
+      title: `Бонус ${tierPieces < 2 ? "2" : "4"} предметов тир-сета`,
+      why: `Надето ${tierPieces} ${plural(tierPieces, "часть", "части", "частей")} тир-сета. До бонуса не хватает ${need}. Бонус комплекта часто даёт больше, чем +10 к уровню предметов.`,
+      gain: `Бонус ${tierPieces < 2 ? "2" : "4"} предметов` });
+  }
+
+  // Бесплатные советы: доверие важнее продажи
+  if (missingEnchants && missingEnchants.length) {
+    tips.push(`Нет чар: ${missingEnchants.map((s) => SLOT_RU[s].toLowerCase()).join(", ")}. Это дешёвый прирост характеристик, можно сделать самому через аукцион.`);
+  }
+  if (emptySlots.length) {
+    tips.push(`Пустые слоты: ${emptySlots.map((s) => SLOT_RU[s].toLowerCase()).join(", ")}. Любой предмет в них сразу поднимет уровень предметов.`);
+  }
+  if (ch.role === "TANK" || ch.role === "HEALING") {
+    tips.push(`${ch.role === "TANK" ? "Танки" : "Лекари"} находят группы в ключи быстрее бойцов. Для роста рейтинга часто достаточно коучинга по маршрутам и кулдаунам.`);
+  }
+
+  // Уже всё закрыто → не давим продажей, предлагаем коллекции и коучинг (удержание)
+  const endgameDone = (score || 0) >= 3000 && va.h >= 8;
+  if (endgameDone) {
+    add({ id: "top_collections", svc: "mounts", prio: 50,
+      title: "Маунты и коллекции сезона",
+      why: "Основной контент сезона закрыт. Дальше ценность в редких маунтах, трансмогрификации и «Славе рейдера».",
+      gain: "Редкие награды, которых нет у большинства игроков" });
+    add({ id: "top_glory", svc: "glory", prio: 40,
+      title: "Glory of the Venomous Abyss Raider",
+      why: "Мета-достижение рейда с маунтом. Требует выполнения особых условий на каждом боссе.",
+      gain: "Маунт за мета-достижение" });
+    if ((score || 0) < 3500) add({ id: "top_coaching", svc: "coaching", prio: 34,
+      title: "Коучинг с про-игроком",
+      why: `Рейтинг ${fmt(score)}: дальше рост упирается в личную игру. Разбор записей с про-игроком даёт больше, чем ещё один ключ.`,
+      gain: "Рост рейтинга без постоянных заказов" });
+  }
+
+  return { readiness, stage, parts, recos: rank(recos), tips, tierPieces, missingEnchants, weakSlots, emptySlots };
+}
+
+/* Сортировка, удаление дублей по услуге, деление на P1/P2/P3 */
+function rank(list) {
+  const seen = new Set();
+  return list
+    .sort((a, b) => b.prio - a.prio)
+    .filter((r) => (seen.has(r.svc) ? false : seen.add(r.svc)))
+    .slice(0, 5)
+    .map((r, i) => ({ ...r, tier: i === 0 ? 1 : r.prio >= 60 ? 2 : 3 }));
+}
+
+/* ============================================================
+   7. Рендер
+   ============================================================ */
+function ringSvg(value) {
+  const r = 44, c = 2 * Math.PI * r, off = c * (1 - value / 100);
+  return `<svg width="104" height="104" viewBox="0 0 104 104" aria-hidden="true">
+    <circle cx="52" cy="52" r="${r}" fill="none" stroke="var(--panel-2)" stroke-width="9"/>
+    <circle cx="52" cy="52" r="${r}" fill="none" stroke="var(--accent)" stroke-width="9" stroke-linecap="round"
+      stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"/></svg>`;
+}
+
+function renderResult(ch, a) {
+  const cls = CLASSES[ch.className] || { ru: ch.className || "Класс не указан", color: "var(--fg)" };
+  const tr = trackOf(ch.ilvl);
+  const mt = mplusTier(ch.mplus.score);
+  const va = ch.raids["the-venomous-abyss"];
+  const initials = esc((ch.name || "?").slice(0, 1).toUpperCase());
+  const avatar = ch.thumb
+    ? `<img src="${esc(ch.thumb)}" alt="" onerror="this.parentNode.textContent='${initials}'">`
+    : initials;
+  const srcLabel = { raiderio: "Raider.IO", manual: "Ручной ввод", demo: "Демо-персонаж" }[ch.source];
+  const metaParts = [
+    [ch.race, cls.ru].filter(Boolean).join(" · "),
+    [ch.spec, ROLE_RU[ch.role]].filter(Boolean).join(", "),
+    ch.realm ? `${ch.realm}${ch.region ? " · " + ch.region : ""}` : null,
+    ch.guild ? `‹${ch.guild}›` : null,
+  ].filter(Boolean);
+  const ago = daysAgo(ch.updatedAt);
+
+  const statTiles = `
+    <div class="stats">
+      <div class="stat"><span class="label">Уровень</span><span class="v">${ch.level ?? "—"}</span><span class="s">${ch.level >= CONFIG.maxLevel ? "максимальный" : `из ${CONFIG.maxLevel}`}</span></div>
+      <div class="stat"><span class="label">Предметы</span><span class="v ${tr ? tr.cls : ""}">${fmtIlvl(ch.ilvl)}</span><span class="s">${tr ? "трек «" + tr.name + "»" : "нет данных"}</span></div>
+      <div class="stat"><span class="label">Рейтинг M+</span><span class="v" ${ch.mplus.color ? `style="color:${esc(ch.mplus.color)}"` : ""}>${ch.mplus.score === null ? "—" : fmt(ch.mplus.score)}</span><span class="s">${mt ? mt.name : "нет данных"}</span></div>
+      <div class="stat"><span class="label">Тир-сет</span><span class="v">${a.tierPieces === null || a.tierPieces === undefined ? "—" : a.tierPieces + "/5"}</span><span class="s">${a.tierPieces >= 4 ? "бонус 4 предметов" : a.tierPieces >= 2 ? "бонус 2 предметов" : a.tierPieces === null || a.tierPieces === undefined ? "нет данных" : "без бонуса"}</span></div>
+    </div>`;
+
+  const bars = a.parts.map((p) => `
+    <div class="bar-row"><span>${p.k}</span><div class="bar"><i style="width:${p.v === null ? 0 : Math.round(p.v * 100)}%"></i></div><span class="mono small">${p.v === null ? "н/д" : Math.round(p.v * 100)}</span></div>`).join("");
+
+  const gearTable = ch.gear && ch.gear.length ? `
+    <section class="panel">
+      <div class="panel-head"><h2>Экипировка</h2><span class="small muted">средний уровень <b class="mono">${fmtIlvl(ch.ilvl)}</b></span></div>
+      <div class="legend">${CONFIG.tracks.map((t) => `<span class="${t.cls}">${t.name} ${t.min ? t.min + "+" : ""}</span>`).join("")}</div>
+      <div class="gear-wrap"><table class="gear">
+        <thead><tr><th>Слот</th><th>Предмет</th><th>Ур.</th><th>Чары</th></tr></thead>
+        <tbody>${ch.gear.map((g) => {
+          const t = trackOf(g.ilvl);
+          const weak = a.weakSlots.includes(g.slot);
+          const ench = g.enchanted === null ? `<span class="muted small">—</span>` : g.enchanted ? `<span class="pill good">есть</span>` : `<span class="pill bad">нет</span>`;
+          return `<tr class="${weak ? "weak" : ""}"><td>${SLOT_RU[g.slot]}${weak ? ` <span class="pill bad">слабый</span>` : ""}</td>
+            <td class="name" title="${esc(g.name)}">${esc(g.name)}${g.tier ? ` <span class="pill warn">тир</span>` : ""}</td>
+            <td class="mono ${t ? t.cls : ""}">${g.ilvl ?? "—"}</td><td>${ench}</td></tr>`;
+        }).join("")}</tbody></table></div>
+    </section>` : `
+    <section class="panel"><div class="panel-head"><h2>Экипировка</h2></div>
+      <p class="muted small" style="margin:0">${ch.source === "raiderio" ? "Raider.IO ещё не собрал экипировку этого персонажа. Анализ построен по рейтингу и рейдам." : "Для ручного ввода показываем только средний уровень предметов."}</p></section>`;
+
+  const raidRows = CONFIG.raids.map((r) => {
+    const p = ch.raids[r.slug];
+    if (!p) return `<div class="raid"><div><b>${r.name}</b><div class="small muted">${r.ru} · нет данных</div></div><div class="diff"><span>н/д</span></div></div>`;
+    const cell = (k, l) => `<span class="${p[k] >= p.total ? "full" : p[k] > 0 ? "part" : ""}">${l} ${p[k]}/${p.total}</span>`;
+    return `<div class="raid"><div><b>${r.name}</b><div class="small muted">${r.ru} · ${r.bosses} ${plural(r.bosses, "босс", "босса", "боссов")}</div></div>
+      <div class="diff">${cell("n", "N")}${cell("h", "H")}${cell("m", "M")}</div></div>`;
+  }).join("");
+  const achievements = [ch.aotc ? `<span class="pill good">Ahead of the Curve</span>` : "", ch.ce ? `<span class="pill warn">Cutting Edge</span>` : ""].join(" ");
+
+  const runs = ch.mplus.best && ch.mplus.best.length ? `
+    <div class="runs">${ch.mplus.best.slice(0, 8).map((r) => `<div class="run ${r.timed ? "" : "depleted"}"><span class="small muted">${esc(r.short || r.dungeon)}</span><b>+${r.level}</b><span class="small ${r.timed ? "" : "muted"}">${r.timed ? "в таймер" : "просрочен"}</span></div>`).join("")}</div>` :
+    `<p class="muted small" style="margin:0">${ch.mplus.score ? "Список ключей недоступен." : "В этом сезоне ключи ещё не закрыты."}</p>`;
+
+  // Рекомендации
+  const paid = a.recos.filter((r) => r.svc);
+  const recoHtml = paid.map((r, i) => {
+    const s = SERVICES[r.svc];
+    return `<article class="reco ${i === 0 ? "top" : ""}" data-rule="${r.id}">
+      <div class="reco-head"><h3>${esc(r.title)}</h3><span class="prio p${r.tier}">${r.tier === 1 ? "Главное сейчас" : r.tier === 2 ? "Важно" : "Можно позже"}</span></div>
+      <p class="why">${esc(r.why)}</p>
+      <p class="gain">Результат: <b>${esc(r.gain)}</b></p>
+      <div class="cta"><a class="cta-link ${i === 0 ? "" : "ghost"}" href="${serviceUrl(r.svc, r.id)}" target="_blank" rel="noopener" data-svc="${r.svc}" data-rule="${r.id}">${esc(s.title)} →</a><span class="small muted">${s.cat}</span></div>
+    </article>`;
+  }).join("");
+
+  const bundleItems = paid.slice(0, 3);
+  const bundle = bundleItems.length >= 2 ? `
+    <div class="bundle">
+      <span class="label">Пакет под этого персонажа</span>
+      <ul>${bundleItems.map((r) => `<li>${esc(SERVICES[r.svc].title)}</li>`).join("")}</ul>
+      <p class="small" style="margin:0">Заказ ${bundleItems.length} ${plural(bundleItems.length, "услуги", "услуг", "услуг")} вместе: <b>−${CONFIG.bundleDiscount}%</b> от суммы и один менеджер на весь путь.</p>
+      <div><a class="cta-link" href="${serviceUrl("raid_key", "bundle_" + bundleItems.map((r) => r.id).join("+"))}" target="_blank" rel="noopener" data-svc="bundle" data-rule="bundle">Собрать пакет →</a></div>
+    </div>` : "";
+
+  const member = `
+    <div class="member">
+      <span class="label" style="color:var(--accent)">Skycoach Membership · концепт</span>
+      <b>Подписка окупается со второго заказа в месяц</b>
+      <ul>
+        <li>−${CONFIG.memberDiscount}% на все услуги, в том числе на этот план</li>
+        <li>Приоритетный подбор про-игрока и ответ поддержки до 5 минут</li>
+        <li>Бонусные баллы ×2 и личный кабинет с прогрессом персонажа</li>
+      </ul>
+      <div><a class="cta-link ghost" href="${SKY}/cashback?utm_source=character_scan&utm_medium=crosssell&utm_campaign=membership_teaser" target="_blank" rel="noopener" data-svc="membership" data-rule="membership_teaser">Узнать о подписке →</a></div>
+    </div>`;
+
+  const tips = a.tips.length ? `
+    <section class="panel"><h2>Бесплатные советы</h2><ul class="tips">${a.tips.map((t) => `<li><span>${esc(t)}</span></li>`).join("")}</ul></section>` : "";
+
+  const staleNote = ago !== null && ago > CONFIG.staleDays
+    ? `<div class="notice warn"><b>Данные могли устареть</b><span class="small">Raider.IO обновлял профиль ${ago} ${plural(ago, "день", "дня", "дней")} назад. Зайдите в игру и обновите профиль на raider.io, чтобы анализ учёл свежую экипировку.</span></div>` : "";
+
+  const manualNote = ch.source === "manual" ? `<div class="notice info"><span class="small">Ручной ввод: анализ построен по введённым цифрам. Слабые слоты, чары и мини-рейды без профиля Raider.IO не проверяются.</span></div>` : "";
+
+  $("#result").innerHTML = `
+    <div class="result">
+      <div class="col">
+        <section class="panel" style="--cls:${cls.color}">
+          <div class="hero">
+            <div class="avatar">${avatar}</div>
+            <div class="who">
+              <span class="source-tag">${srcLabel}${ch.updatedAt ? " · обновлён " + (ago === 0 ? "сегодня" : ago + " дн. назад") : ""}</span>
+              <h2>${esc(ch.name)}</h2>
+              <div class="meta">${metaParts.map(esc).join(" · ")}</div>
+              ${ch.profileUrl ? `<a class="small" href="${esc(ch.profileUrl)}" target="_blank" rel="noopener">Профиль на Raider.IO ↗</a>` : ""}
+            </div>
+            <div class="ring" role="img" aria-label="Готовность к сезону ${a.readiness} из 100">${ringSvg(a.readiness)}<div class="val"><div><b>${a.readiness}</b><br><span>готовность</span></div></div></div>
+          </div>
+          ${statTiles}
+          <div class="panel-head"><span class="label">Из чего складывается готовность</span><span class="small" style="color:var(--accent);font-weight:700">${a.stage}</span></div>
+          <div class="bars">${bars}</div>
+        </section>
+        ${staleNote}${manualNote}
+        ${gearTable}
+        <section class="panel">
+          <div class="panel-head"><h2>Рейды сезона</h2><div>${achievements}</div></div>
+          <div class="raid-list">${raidRows}</div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Лучшие ключи сезона</h2>${ch.mplus.score ? `<span class="small muted">рейтинг <b class="mono">${fmt(ch.mplus.score)}</b></span>` : ""}</div>
+          ${runs}
+        </section>
+      </div>
+      <div class="col">
+        <section class="panel">
+          <div class="panel-head"><h2>Что прокачать дальше</h2><span class="small muted">по приоритету</span></div>
+          ${paid.length ? `<div class="reco-list">${recoHtml}</div>` : `<p class="muted" style="margin:0">Мы не нашли, что улучшить за деньги. Персонаж в отличной форме.</p>`}
+          ${bundle}
+        </section>
+        ${member}
+        ${tips}
+      </div>
+    </div>`;
+
+  track("recommendations_shown", { source: ch.source, readiness: a.readiness, rules: paid.map((r) => r.id) });
+}
+
+/* ============================================================
+   8. Ошибки и пограничные случаи
+   ============================================================ */
+function showNotice(kind, title, html, actions = []) {
+  const n = document.createElement("div");
+  n.className = `notice ${kind}`;
+  n.innerHTML = `<b>${esc(title)}</b><div class="small">${html}</div>${actions.length ? `<div class="actions">${actions.map((a, i) => `<button class="link-btn" data-i="${i}" type="button">${esc(a.label)}</button>`).join("")}</div>` : ""}`;
+  n.querySelectorAll("[data-i]").forEach((b) => b.addEventListener("click", () => actions[Number(b.dataset.i)].run()));
+  $("#notices").replaceChildren(n);
+}
+function clearNotices() { $("#notices").replaceChildren(); }
+
+function handleScanError(e, ctx) {
+  track("scan_error", { code: e.code, region: ctx.region, realm: ctx.realm });
+  const toManual = { label: "Ввести данные вручную", run: () => switchTab("manual") };
+  const toDemo = { label: "Посмотреть демо", run: () => switchTab("demo") };
+  switch (e.code) {
+    case "not_found":
+    case "realm_not_found":
+      if (e.code === "realm_not_found" && !e.altRegion) {
+        showNotice("bad", "Сервер не найден",
+          `В регионе ${ctx.region.toUpperCase()} нет сервера <b>${esc(ctx.realm)}</b>. Проверьте написание: подходят английское и русское название («Ревущий фьорд» и «Howling Fjord»), апострофы можно не ставить. Если сервер американский, переключите регион.`, [toManual, toDemo]);
+        return;
+      }
+      if (e.altRegion) {
+        showNotice("warn", `Персонаж найден в регионе ${e.altRegion.toUpperCase()}`,
+          `В регионе ${ctx.region.toUpperCase()} такого персонажа нет, но в ${e.altRegion.toUpperCase()} есть.`,
+          [{ label: `Открыть в ${e.altRegion.toUpperCase()}`, run: () => { $("#f-region").value = e.altRegion; runLive(); } }]);
+        return;
+      }
+      showNotice("bad", "Персонаж не найден",
+        `Raider.IO не знает персонажа <b>${esc(ctx.name)}</b> на сервере <b>${esc(e.triedRealm || ctx.realm)}</b> (${ctx.region.toUpperCase()}). Частые причины:
+         <ul><li>опечатка в имени или сервере, лишний апостроф или пробел;</li>
+         <li>персонаж ниже ${CONFIG.maxLevel} уровня: Raider.IO хранит только персонажей максимального уровня;</li>
+         <li>персонаж давно не заходил в игру или только что переименован.</li></ul>`, [toManual, toDemo]);
+      return;
+    case "rate_limit":
+      showNotice("warn", "Raider.IO просит подождать", "Слишком много запросов за короткое время. Повторите через минуту или посмотрите демо.", [{ label: "Повторить", run: runLive }, toDemo]);
+      return;
+    case "timeout":
+    case "upstream":
+    case "bad_json":
+      showNotice("warn", "Raider.IO сейчас не отвечает", `${esc(e.message)} Можно повторить или ввести данные вручную.`, [{ label: "Повторить", run: runLive }, toManual]);
+      return;
+    case "network":
+    default:
+      showNotice("warn", "Нет связи с Raider.IO",
+        "Запрос не дошёл: нет интернета, мешает блокировщик или страница открыта в окружении, которое запрещает внешние запросы. Ручной ввод и демо работают без сети.", [toManual, toDemo]);
+  }
+}
+
+/* ============================================================
+   9. Сценарии: живой поиск, ручной ввод, демо
+   ============================================================ */
+let busy = false;
+async function runLive() {
+  if (busy) return;
+  clearNotices();
+  const region = $("#f-region").value;
+  let realm = $("#f-realm").value.trim();
+  let name = $("#f-name").value.trim();
+
+  // Ссылка в любом из полей
+  const fromUrl = parseProfileUrl(name) || parseProfileUrl(realm);
+  if (fromUrl && fromUrl.error) { setFieldError("name", "Не получилось разобрать ссылку. Нужна ссылка вида raider.io/characters/eu/сервер/имя."); return; }
+  if (fromUrl) {
+    $("#f-region").value = fromUrl.region; $("#f-realm").value = fromUrl.realm; $("#f-name").value = fromUrl.name;
+    realm = fromUrl.realm; name = fromUrl.name;
+    track("url_parsed", { region: fromUrl.region });
+  }
+  const reg = fromUrl ? fromUrl.region : region;
+
+  let ok = true;
+  setFieldError("realm", realm ? null : "Укажите сервер.");
+  if (!realm) ok = false;
+  const nameErr = validateName(name);
+  setFieldError("name", nameErr);
+  if (nameErr) ok = false;
+  if (!ok) { track("validation_error", { realm: !realm, name: nameErr }); return; }
+
+  busy = true;
+  $("#btn-scan").disabled = true; $("#btn-scan").textContent = "Ищем…";
+  $("#result").innerHTML = `<div class="loading"><div class="spin"></div><span>Загружаем профиль ${esc(name)} из Raider.IO…</span></div>`;
+  track("scan_started", { region: reg, realm: realmSlug(realm) });
+  try {
+    const { data, cached, realm: usedRealm } = await scanLive(reg, realm, name);
+    const ch = normalizeRio(data);
+    track("scan_success", { region: reg, realm: usedRealm, cached, has_gear: Boolean(ch.gear), score: ch.mplus.score });
+    renderResult(ch, analyze(ch));
+    try { const u = new URL(location.href); u.search = new URLSearchParams({ region: reg, realm: usedRealm, name }).toString(); history.replaceState(null, "", u); } catch (e) {}
+  } catch (e) {
+    $("#result").innerHTML = "";
+    handleScanError(e instanceof ScanError ? e : new ScanError("network", String(e)), { region: reg, realm, name });
+  } finally {
+    busy = false;
+    $("#btn-scan").disabled = false; $("#btn-scan").textContent = "Проверить";
+  }
+}
+
+function setFieldError(field, msg) {
+  const box = $(`#fld-${field}`); const err = $(`#err-${field}`);
+  box.classList.toggle("invalid", Boolean(msg)); err.hidden = !msg; err.textContent = msg || "";
+}
+
+function runManual() {
+  clearNotices();
+  const level = num($("#m-level").value), ilvl = num($("#m-ilvl").value), score = num($("#m-score").value);
+  const errs = {
+    level: level === null || level < 1 || level > CONFIG.maxLevel || !Number.isInteger(level) ? `Уровень от 1 до ${CONFIG.maxLevel}.` : null,
+    ilvl: ilvl !== null && (ilvl < 1 || ilvl > CONFIG.ilvlCap + 10) ? `Уровень предметов в этом сезоне от 1 до ${CONFIG.ilvlCap}.` : (ilvl === null && level === CONFIG.maxLevel ? "Укажите уровень предметов (в игре: окно персонажа)." : null),
+    score: score !== null && (score < 0 || score > 5000) ? "Рейтинг от 0 до 5000." : null,
+  };
+  let ok = true;
+  for (const [k, msg] of Object.entries(errs)) {
+    const box = $(`#mf-${k}`); box.classList.toggle("invalid", Boolean(msg));
+    const e = box.querySelector(".err"); e.hidden = !msg; e.textContent = msg || ""; if (msg) ok = false;
+  }
+  if (!ok) { track("validation_error", { form: "manual" }); return; }
+  const ch = normalizeManual({
+    name: $("#m-name").value.trim() || "Мой персонаж", className: $("#m-class").value, role: $("#m-role").value,
+    level, ilvl: level < CONFIG.maxLevel ? (ilvl ?? null) : ilvl, score: level < CONFIG.maxLevel ? null : (score ?? 0),
+    raid: level < CONFIG.maxLevel ? "0" : $("#m-raid").value, tier: $("#m-tier").value,
+  });
+  track("manual_submitted", { level, ilvl, score });
+  renderResult(ch, analyze(ch));
+}
+
+/* Демо-персонажи: вымышленные, покрывают разные стадии сезона */
+function demoGear(avg, opts = {}) {
+  const names = { head: "Шлем Ядовитой глубины", neck: "Ожерелье прилива", shoulder: "Наплечники Ула'тека", back: "Плащ туманного шёлка", chest: "Нагрудник Ула'тека",
+    waist: "Пояс токсичных сожалений", wrist: "Наручи заклинателя", hands: "Перчатки Ула'тека", legs: "Поножи Ула'тека", feet: "Сапоги тихого шага",
+    finger1: "Кольцо роя", finger2: "Кольцо Син'дорай", trinket1: "Клык ужаса", trinket2: "Зелёный идол", mainhand: "Клинок Зул'джарры" };
+  const tierSlots = ["head", "shoulder", "chest", "hands", "legs"].slice(0, opts.tier || 0);
+  return Object.keys(names).map((slot, i) => ({
+    slot, name: names[slot] + (tierSlots.includes(slot) ? "" : ""),
+    ilvl: (opts.weak || []).includes(slot) ? avg - 16 : avg + ((i * 7) % 5) - 2,
+    quality: 4,
+    enchanted: CONFIG.enchantSlots.includes(slot) ? !(opts.noEnchant || []).includes(slot) : null,
+    tier: tierSlots.includes(slot),
+  }));
+}
+const DEMOS = [
+  { key: "alt", label: "Твинк в прокачке", sub: "Монах, 78 уровень",
+    make: () => normalizeManual({ source: "demo", name: "Ветерок", className: "Monk", spec: "Windwalker", role: "DPS", race: "Pandaren", realm: "Gordunni", region: "EU", level: 78, ilvl: 241, score: null, raid: "0", tier: "0" }) },
+  { key: "fresh", label: "Свежий 90 уровень", sub: "Охотник, 287 ур. предметов",
+    make: () => { const c = normalizeManual({ source: "demo", name: "Стрелолист", className: "Hunter", spec: "Beast Mastery", role: "DPS", race: "Night Elf", realm: "Howling Fjord", region: "EU", level: 90, ilvl: 287, score: 0, raid: "0" }); c.gear = demoGear(287, { noEnchant: ["head", "legs", "feet", "finger1", "finger2"] }); c.raids["the-tidebound-grotto"] = { n: 0, h: 0, m: 0, total: 1 }; c.raids["the-unbinding-of-kithix"] = { n: 0, h: 0, m: 0, total: 1 }; return c; } },
+  { key: "mid", label: "Середина сезона", sub: "Паладин, 1 740 M+, 3/8 героик",
+    make: () => { const c = normalizeManual({ source: "demo", name: "Светоклин", className: "Paladin", spec: "Retribution", role: "DPS", race: "Blood Elf", realm: "Ravencrest", region: "EU", level: 90, ilvl: 314, score: 1740, raid: "h4" });
+      c.raids["the-venomous-abyss"] = { n: 8, h: 3, m: 0, total: 8 }; c.raids["the-tidebound-grotto"] = { n: 1, h: 0, m: 0, total: 1 }; c.raids["the-unbinding-of-kithix"] = { n: 0, h: 0, m: 0, total: 1 };
+      c.aotc = false; c.gear = demoGear(314, { tier: 2, weak: ["wrist", "trinket2"], noEnchant: ["feet"] });
+      c.mplus.best = [["DON", 9, 1], ["KR", 8, 1], ["MR", 8, 0], ["AOF", 7, 1], ["TOS", 9, 0], ["BV", 7, 1], ["RLP", 6, 1], ["VSA", 8, 0]].map(([s, l, t]) => ({ dungeon: s, short: s, level: l, timed: Boolean(t) }));
+      return c; } },
+  { key: "almost", label: "Почти Keystone Hero", sub: "Друид-танк, 2 380 M+",
+    make: () => { const c = normalizeManual({ source: "demo", name: "Корнеплёт", className: "Druid", spec: "Guardian", role: "TANK", race: "Tauren", realm: "Silvermoon", region: "EU", level: 90, ilvl: 326, score: 2380, raid: "h8" });
+      c.raids["the-tidebound-grotto"] = { n: 1, h: 1, m: 0, total: 1 }; c.raids["the-unbinding-of-kithix"] = { n: 1, h: 0, m: 0, total: 1 };
+      c.gear = demoGear(326, { tier: 4 }); c.mplus.best = [["DON", 13, 1], ["KR", 12, 1], ["MR", 13, 1], ["AOF", 12, 0], ["TOS", 13, 1], ["BV", 12, 1], ["RLP", 12, 1], ["VSA", 11, 1]].map(([s, l, t]) => ({ dungeon: s, short: s, level: l, timed: Boolean(t) })); return c; } },
+  { key: "top", label: "Топ сезона", sub: "Маг, 3 320 M+, 8/8 мифик",
+    make: () => { const c = normalizeManual({ source: "demo", name: "Чароплёт", className: "Mage", spec: "Frost", role: "DPS", race: "Void Elf", realm: "Tarren Mill", region: "EU", level: 90, ilvl: 340, score: 3320, raid: "m8" });
+      c.raids["the-tidebound-grotto"] = { n: 1, h: 1, m: 1, total: 1 }; c.raids["the-unbinding-of-kithix"] = { n: 1, h: 1, m: 1, total: 1 };
+      c.gear = demoGear(340, { tier: 4 }); c.mplus.best = [["DON", 19, 1], ["KR", 19, 1], ["MR", 18, 1], ["AOF", 19, 1], ["TOS", 18, 1], ["BV", 19, 1], ["RLP", 18, 1], ["VSA", 18, 1]].map(([s, l, t]) => ({ dungeon: s, short: s, level: l, timed: Boolean(t) })); return c; } },
+];
+function runDemo(key) {
+  const d = DEMOS.find((x) => x.key === key) || DEMOS[2];
+  clearNotices();
+  const ch = d.make();
+  track("demo_opened", { demo: d.key });
+  renderResult(ch, analyze(ch));
+}
+
+/* ============================================================
+   10. Инициализация
+   ============================================================ */
+function switchTab(tab) {
+  document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.tab === tab)));
+  document.querySelectorAll("[data-pane]").forEach((p) => { p.hidden = p.dataset.pane !== tab; });
+  track("tab_opened", { tab });
+}
+
+function init() {
+  $("#m-class").innerHTML = Object.entries(CLASSES).map(([k, v]) => `<option value="${k}">${v.ru}</option>`).join("");
+  $("#demo-list").innerHTML = DEMOS.map((d) => `<button class="demo-card" type="button" data-demo="${d.key}"><b>${esc(d.label)}</b><span>${esc(d.sub)}</span></button>`).join("");
+  document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => switchTab(t.dataset.tab)));
+  $("#form-live").addEventListener("submit", (e) => { e.preventDefault(); runLive(); });
+  $("#form-manual").addEventListener("submit", (e) => { e.preventDefault(); runManual(); });
+  $("#demo-list").addEventListener("click", (e) => { const b = e.target.closest("[data-demo]"); if (b) runDemo(b.dataset.demo); });
+  // Вставка ссылки в поле имени сразу раскладывается по полям
+  $("#f-name").addEventListener("paste", () => setTimeout(() => {
+    const p = parseProfileUrl($("#f-name").value);
+    if (p && !p.error) { $("#f-region").value = p.region; $("#f-realm").value = p.realm; $("#f-name").value = p.name; setFieldError("name", null); setFieldError("realm", null); }
+  }, 0));
+  ["realm", "name"].forEach((f) => $(`#f-${f}`).addEventListener("input", () => setFieldError(f, null)));
+  // Клики по услугам — ключевое событие воронки кросс-сейла
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest("a[data-svc]");
+    if (a) track("service_click", { service: a.dataset.svc, rule: a.dataset.rule });
+  });
+  // Последний регион запоминаем для удобства
+  const lastRegion = store("last_region"); if (lastRegion) $("#f-region").value = lastRegion;
+  $("#f-region").addEventListener("change", () => store("last_region", $("#f-region").value));
+
+  // Глубокая ссылка ?region=eu&realm=...&name=... запускает анализ сразу
+  let params = null;
+  try { params = new URLSearchParams(location.search); } catch (e) {}
+  if (params && params.get("name") && params.get("realm")) {
+    $("#f-region").value = ["eu", "us", "kr", "tw"].includes(params.get("region")) ? params.get("region") : "eu";
+    $("#f-realm").value = params.get("realm"); $("#f-name").value = params.get("name");
+    runLive();
+  } else {
+    runDemo("mid");   // первый экран показывает, что умеет сервис
+    showNotice("info", "Это пример на демо-персонаже", "Введите регион, сервер и имя своего персонажа выше или вставьте ссылку на профиль Raider.IO.");
+  }
+}
+init();
+</script>
+</body>
+</html>
