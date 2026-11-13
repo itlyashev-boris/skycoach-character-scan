@@ -157,6 +157,9 @@ table.gear { width: 100%; border-collapse: collapse; font-size: 13px; }
 .run { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; display: grid; gap: 2px; }
 .run b { font-family: var(--font-mono); font-size: 18px; }
 .run.depleted b { color: var(--muted); }
+.run { cursor: help; }
+.run-full { font-size: 12px; line-height: 1.25; min-height: 30px; }
+.runs-legend { margin: 0; line-height: 1.5; }
 
 /* recommendations */
 .reco-list { display: grid; gap: 12px; }
@@ -347,6 +350,11 @@ const CONFIG = {
     { slug: "the-tidebound-grotto",   name: "The Tidebound Grotto",    ru: "Грот Приливов", bosses: 1 },
     { slug: "the-unbinding-of-kithix", name: "The Unbinding of Kith'ix", ru: "Освобождение Кит'икса", bosses: 1 },
   ],
+  // Подземелья Mythic+ сезона: сокращение → полное название (Raider.IO, season-mn-2)
+  dungeons: {
+    AOF: "Altar of Fangs", DON: "Den of Nalorakk", KR: "Kings' Rest", MR: "Murder Row",
+    RLP: "Ruby Life Pools", TOS: "Temple of Sethraliss", BV: "The Blinding Vale", VSA: "Voidscar Arena",
+  },
   enchantSlots: ["head", "shoulder", "chest", "legs", "feet", "finger1", "finger2", "mainhand"],
   weakSlotGap: 12,          // слот ниже среднего на столько уровней считается слабым
   staleDays: 14,
@@ -953,7 +961,12 @@ function renderResult(ch, a) {
   const achievements = [ch.aotc ? `<span class="pill good">Ahead of the Curve</span>` : "", ch.ce ? `<span class="pill warn">Cutting Edge</span>` : ""].join(" ");
 
   const runs = ch.mplus.best && ch.mplus.best.length ? `
-    <div class="runs">${ch.mplus.best.slice(0, 8).map((r) => `<div class="run ${r.timed ? "" : "depleted"}"><span class="small muted">${esc(r.short || r.dungeon)}</span><b>+${r.level}</b><span class="small ${r.timed ? "" : "muted"}">${r.timed ? "в таймер" : "просрочен"}</span></div>`).join("")}</div>` :
+    <div class="runs">${ch.mplus.best.slice(0, 8).map((r) => {
+      const full = r.dungeon && r.dungeon !== r.short ? r.dungeon : (CONFIG.dungeons[r.short] || r.short);
+      const tip = `${full} · ключ +${r.level} · ${r.timed ? "пройден в таймер, рейтинг полный" : "пройден после таймера, рейтинг ниже"}`;
+      return `<div class="run ${r.timed ? "" : "depleted"}" title="${esc(tip)}" aria-label="${esc(tip)}"><span class="small muted run-name">${esc(r.short || full)}</span><span class="run-full">${esc(full)}</span><b>+${r.level}</b><span class="small ${r.timed ? "" : "muted"}">${r.timed ? "в таймер" : "просрочен"}</span></div>`;
+    }).join("")}</div>
+    <p class="small muted runs-legend"><b>+N</b> — уровень ключа: чем выше, тем больше рейтинга. <b>В таймер</b> — группа уложилась в лимит времени, рейтинг за подземелье полный. <b>Просрочен</b> — пройдено с опозданием, рейтинга меньше. Наведите на плитку, чтобы увидеть детали.</p>` :
     `<p class="muted small" style="margin:0">${ch.mplus.score ? "Список ключей недоступен." : "В этом сезоне ключи ещё не закрыты."}</p>`;
 
   // Рекомендации
@@ -1241,16 +1254,16 @@ const DEMOS = [
     make: () => { const c = normalizeManual({ source: "demo", name: "Светоклин", className: "Paladin", spec: "Retribution", role: "DPS", race: "Blood Elf", realm: "Ravencrest", region: "EU", level: 90, ilvl: 314, score: 1740, raid: "h4", achPts: 17450 });
       c.raids["the-venomous-abyss"] = { n: 8, h: 3, m: 0, total: 8 }; c.raids["the-tidebound-grotto"] = { n: 1, h: 0, m: 0, total: 1 }; c.raids["the-unbinding-of-kithix"] = { n: 0, h: 0, m: 0, total: 1 };
       c.aotc = false; c.gear = demoGear(314, { tier: 2, weak: ["wrist", "trinket2"], noEnchant: ["feet"] });
-      c.mplus.best = [["DON", 9, 1], ["KR", 8, 1], ["MR", 8, 0], ["AOF", 7, 1], ["TOS", 9, 0], ["BV", 7, 1], ["RLP", 6, 1], ["VSA", 8, 0]].map(([s, l, t]) => ({ dungeon: s, short: s, level: l, timed: Boolean(t) }));
+      c.mplus.best = [["DON", 9, 1], ["KR", 8, 1], ["MR", 8, 0], ["AOF", 7, 1], ["TOS", 9, 0], ["BV", 7, 1], ["RLP", 6, 1], ["VSA", 8, 0]].map(([s, l, t]) => ({ dungeon: CONFIG.dungeons[s] || s, short: s, level: l, timed: Boolean(t) }));
       return c; } },
   { key: "almost", label: "Почти Keystone Hero", sub: "Друид-танк, 2 380 M+",
     make: () => { const c = normalizeManual({ source: "demo", name: "Корнеплёт", className: "Druid", spec: "Guardian", role: "TANK", race: "Tauren", realm: "Silvermoon", region: "EU", level: 90, ilvl: 326, score: 2380, raid: "h8", achPts: 24615, mounts: 287 });
       c.raids["the-tidebound-grotto"] = { n: 1, h: 1, m: 0, total: 1 }; c.raids["the-unbinding-of-kithix"] = { n: 1, h: 0, m: 0, total: 1 };
-      c.gear = demoGear(326, { tier: 4 }); c.mplus.best = [["DON", 13, 1], ["KR", 12, 1], ["MR", 13, 1], ["AOF", 12, 0], ["TOS", 13, 1], ["BV", 12, 1], ["RLP", 12, 1], ["VSA", 11, 1]].map(([s, l, t]) => ({ dungeon: s, short: s, level: l, timed: Boolean(t) })); return c; } },
+      c.gear = demoGear(326, { tier: 4 }); c.mplus.best = [["DON", 13, 1], ["KR", 12, 1], ["MR", 13, 1], ["AOF", 12, 0], ["TOS", 13, 1], ["BV", 12, 1], ["RLP", 12, 1], ["VSA", 11, 1]].map(([s, l, t]) => ({ dungeon: CONFIG.dungeons[s] || s, short: s, level: l, timed: Boolean(t) })); return c; } },
   { key: "top", label: "Топ сезона", sub: "Маг, 3 320 M+, 8/8 мифик",
     make: () => { const c = normalizeManual({ source: "demo", name: "Чароплёт", className: "Mage", spec: "Frost", role: "DPS", race: "Void Elf", realm: "Tarren Mill", region: "EU", level: 90, ilvl: 340, score: 3320, raid: "m8", achPts: 38920, mounts: 512 });
       c.raids["the-tidebound-grotto"] = { n: 1, h: 1, m: 1, total: 1 }; c.raids["the-unbinding-of-kithix"] = { n: 1, h: 1, m: 1, total: 1 };
-      c.gear = demoGear(340, { tier: 4 }); c.mplus.best = [["DON", 19, 1], ["KR", 19, 1], ["MR", 18, 1], ["AOF", 19, 1], ["TOS", 18, 1], ["BV", 19, 1], ["RLP", 18, 1], ["VSA", 18, 1]].map(([s, l, t]) => ({ dungeon: s, short: s, level: l, timed: Boolean(t) })); return c; } },
+      c.gear = demoGear(340, { tier: 4 }); c.mplus.best = [["DON", 19, 1], ["KR", 19, 1], ["MR", 18, 1], ["AOF", 19, 1], ["TOS", 18, 1], ["BV", 19, 1], ["RLP", 18, 1], ["VSA", 18, 1]].map(([s, l, t]) => ({ dungeon: CONFIG.dungeons[s] || s, short: s, level: l, timed: Boolean(t) })); return c; } },
 ];
 function runDemo(key) {
   const d = DEMOS.find((x) => x.key === key) || DEMOS[2];
